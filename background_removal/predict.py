@@ -1,6 +1,5 @@
 from torch.autograd import Variable
 import torch
-from skimage import io
 
 def predict(vgg, pred_loader):
     print("Predicting")
