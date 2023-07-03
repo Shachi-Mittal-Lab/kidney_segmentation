@@ -1,4 +1,3 @@
-from tkinter import CENTER
 import numpy as np
 import os
 
@@ -22,31 +21,31 @@ import torch.utils.data as data
 import torch.nn as nn
 
 # Cluster Model Inputs
-#PREDICT_DIR = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/ROIs_original"
-PREDICT_DIR = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/ROIs_original"
-CENTERS_FILE = "/home/riware/Documents/Mittal_Lab/Mittal_Lab_Repository/Mittal_Lab_Repository/kidney_project/ndpi_tools/cluster/average_centers_4.txt"
-DIRECTORY = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/clustering/ROI_clustering_test"
-CENTERS_FILE_COLLAGEN = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/clustering/collagen_cluster_centers_investigation/old_annotations/all_superpatches/average_centers_5_collagen.txt"
+# PREDICT_DIR = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/ROIs_original"
+PREDICT_DIR = "/home/pattonw/Rachel/Mittallab/fib_seg/ROIs_original"
+CENTERS_FILE = "/home/pattonw/Rachel/Mittallab/kidney_segmentation/average_centers_4.txt"
+DIRECTORY = "/home/pattonw/Rachel/Mittallab/fibrosis_score_pipeline_testing/preds_w_contrast_adj_glom1"
+CENTERS_FILE_COLLAGEN = "/home/pattonw/Rachel/Mittallab/kidney_segmentation/average_centers_5_collagen.txt"
 
 # VGG16 4 Class Model Inputs
-MODEL_4CLASS_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/VGG16_model_data"
+MODEL_4CLASS_DIR = "/home/pattonw/Rachel/Mittallab/VGG16_model_data"
 model_4class = "model22"
-DATASET_4CLASS_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/VGG16_datasets"
+DATASET_4CLASS_DIR = "/home/pattonw/Rachel/Mittallab/VGG16_datasets"
 dataset_4class = "V29"
 epoch_4class = "22"
-batchsize = 8
+batchsize = 1
 x_tile_size = 48
 y_tile_size = 48
 threshold = 20
 color_delta = 70
 
 # VGG16 Fibrosis Model Inputs
-MODEL_FIB_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/fibrosis_score/VGG16_fib_models"
+MODEL_FIB_DIR = "/home/pattonw/Rachel/Mittallab/VGG16_fib_models"
 model_fib = "model26"
-DATASET_FIB_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/fibrosis_score/fibrosis_datasets"
+DATASET_FIB_DIR = "/home/pattonw/Rachel/Mittallab/fibrosis_datasets"
 dataset_fib = "V34_altered"
 epoch_fib = "27"
-batchsize = 8
+batchsize = 1
 x_tile_size = 48
 y_tile_size = 48
 threshold = 20
@@ -121,13 +120,15 @@ for img in tqdm(images):
         staincontrast = "high"
     elif rboverlap > 0.32:
         staincontrast= "low"
-        adjusted = cv2.convertScaleAbs(imageGBR, alpha=1.5, beta=-50)
+        adjusted = cv2.convertScaleAbs(imageGBR, alpha=2, beta=-20) 
+        # tubule: cv2.convertScaleAbs(imageGBR, alpha=1.5, beta=-50)
+        # potential: cv2.convertScaleAbs(imageGBR, alpha=2, beta=-50) 
         imageRGB = cv2.cvtColor(adjusted, cv2.COLOR_BGR2RGB)
         adjusted_img = os.path.join(CLUSTER_DIR, "adjusted_img.tiff")
         tiff.imwrite(adjusted_img, imageRGB, photometric="rgb")
     else: 
         staincontrast = "medium"
-
+        
     # Predict
     predict_image_array = imageRGB
     flattened_predict_array = predict_image_array.reshape(-1, 3)
@@ -276,7 +277,8 @@ for img in tqdm(images):
     )
 
     # Use gpu if available
-    use_gpu = torch.cuda.is_available()
+    # use_gpu = torch.cuda.is_available()
+    use_gpu = False
     if use_gpu:
         print("Using CUDA")
         checkpoint_4class = torch.load(WEIGHTS_FILE_4CLASS)
@@ -337,6 +339,8 @@ for img in tqdm(images):
         model="4classmodel"
     )
 
+    rmtree(ROI_PRED_PATCHES_DIR)
+
     # make fibrosis mask
     stitch_img(
         x_tile_num,
@@ -355,6 +359,9 @@ for img in tqdm(images):
 
     # predict on entire image with background threshold
     #tile image_RGB
+
+    os.mkdir(ROI_PATCHES_DIR)
+    os.mkdir(ROI_TILE_DIR)
 
     # Break up ROI into tiles to give to model_4class (used imageRGB before)
     x_tile_num_original, y_tile_num_original = extract_tiles_original(
@@ -393,7 +400,7 @@ for img in tqdm(images):
         model=model
         )
     
-    pred_mask = os.path.join(CLUSTER_DIR, f"mask_finished_{model}.tiff")
+    """pred_mask = os.path.join(CLUSTER_DIR, f"mask_finished_{model}.tiff")
     full_pred_mask_GBR = cv2.imread(pred_mask)
     full_pred_mask_RGB = cv2.cvtColor(imageGBR, cv2.COLOR_BGR2RGB)
     
@@ -401,9 +408,5 @@ for img in tqdm(images):
     #just_gloms = full_pred_mask_RGB[]
 
     for i, j in np.ndindex(full_pred_mask_RGB.shape[:-1]):
-        if full_pred_mask_RGB[i][j][0] == 255:
-
-
-
-
+        if full_pred_mask_RGB[i][j][0] == 255:"""
 
