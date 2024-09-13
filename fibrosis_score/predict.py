@@ -20,7 +20,8 @@ def predict(vgg, pred_loader):
         inputs, labels, filenames = data
 
         # Formatting for GPU vs CPU
-        use_gpu = torch.cuda.is_available()
+        # use_gpu = torch.cuda.is_available()
+        use_gpu = False
         if use_gpu:
             inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
         else:
