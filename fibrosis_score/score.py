@@ -23,33 +23,35 @@ import torch.nn as nn
 
 # Cluster Model Inputs
 #PREDICT_DIR = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/ROIs_original"
-PREDICT_DIR = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/ROIs_original"
-CENTERS_FILE = "/home/riware/Documents/Mittal_Lab/Mittal_Lab_Repository/Mittal_Lab_Repository/kidney_project/ndpi_tools/cluster/average_centers_4.txt"
-DIRECTORY = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/clustering/ROI_clustering_test"
-CENTERS_FILE_COLLAGEN = "/home/riware/Desktop/fibrosis_score/10_AB_fibscores/clustering/collagen_cluster_centers_investigation/old_annotations/all_superpatches/average_centers_5_collagen.txt"
+#PREDICT_DIR = "/home/riware/Documents/MittalLab/fibrosis_score/10_AB_fibscores/manualstructureremoval/original_rois"
+PREDICT_DIR = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/fib_seg/clustering/regions_for_drsetty/finalrois"
+#CENTERS_FILE = "/home/riware/Documents/MittalLab/Mittal_Lab_Repository/Mittal_Lab_Repository/kidney_project/ndpi_tools/cluster/average_centers_4.txt"
+CENTERS_FILE = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/fib_seg/superpatches/superpatches_v5/average_centers_4.txt"
+DIRECTORY = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/fib_seg/clustering/regions_for_drsetty/finalrois"
+CENTERS_FILE_COLLAGEN = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/10_AB_fibscores/clustering/collagen_cluster_centers_investigation/old_annotations/all_superpatches/average_centers_5_collagen.txt"
 
 # VGG16 4 Class Model Inputs
-MODEL_4CLASS_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/VGG16_model_data"
+MODEL_4CLASS_DIR = "/home/riware/Documents/MittalLab/kidney_project/VGG16_model_data"
 model_4class = "model22"
-DATASET_4CLASS_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/VGG16_datasets"
+DATASET_4CLASS_DIR = "/home/riware/Documents/MittalLab/kidney_project/VGG16_datasets"
 dataset_4class = "V29"
 epoch_4class = "22"
 batchsize = 8
 x_tile_size = 48
 y_tile_size = 48
-threshold = 20
-color_delta = 70
+threshold = 60 #20
+color_delta = 60
 
 # VGG16 Fibrosis Model Inputs
-MODEL_FIB_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/fibrosis_score/VGG16_fib_models"
+MODEL_FIB_DIR = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/VGG16_fib_models"
 model_fib = "model26"
-DATASET_FIB_DIR = "/home/riware/Documents/Mittal_Lab/kidney_project/fibrosis_score/fibrosis_datasets"
+DATASET_FIB_DIR = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/fibrosis_datasets"
 dataset_fib = "V34_altered"
 epoch_fib = "27"
 batchsize = 8
 x_tile_size = 48
 y_tile_size = 48
-threshold = 20
+threshold = 60 #20
 
 # Get cluster centers
 centers = np.loadtxt(CENTERS_FILE)
@@ -315,6 +317,7 @@ for img in tqdm(images):
     pred_loader = data.DataLoader(
         pred_data, batch_size=batchsize, shuffle=False, num_workers=2
     )
+    """
   
     img_files, predictions_4class = predict(trained_VGG16_4class, pred_loader)
     print(" \n Predicted with 4 class model!")
@@ -349,12 +352,9 @@ for img in tqdm(images):
         predictions_fib,
         model="fibmodel"
     )   
-    
-    rmtree(ROI_PRED_PATCHES_DIR)
-    rmtree(ROI_PATCHES_DIR)
-
+    """
     # predict on entire image with background threshold
-    #tile image_RGB
+    # tile image_RGB
 
     # Break up ROI into tiles to give to model_4class (used imageRGB before)
     x_tile_num_original, y_tile_num_original = extract_tiles_original(
@@ -399,11 +399,4 @@ for img in tqdm(images):
     
     just_gloms = np.zeros(full_pred_mask_RGB.shape)
     #just_gloms = full_pred_mask_RGB[]
-
-    for i, j in np.ndindex(full_pred_mask_RGB.shape[:-1]):
-        if full_pred_mask_RGB[i][j][0] == 255:
-
-
-
-
 

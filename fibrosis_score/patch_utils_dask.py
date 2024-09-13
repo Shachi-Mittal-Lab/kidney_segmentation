@@ -6,21 +6,22 @@ from skimage import io
 import re
 from shutil import rmtree
 
+
 import tifffile
-import openslide
 import imagecodecs
+import openslide
 import dask.array
 
 # Open ndpi as zarr array
-def openndpi(ndpi_path):
+def openndpi(ndpi_path, pyramid_level):
     slide = openslide.OpenSlide(ndpi_path)
     x_res = float(slide.properties["tiff.XResolution"])
     y_res = float(slide.properties["tiff.YResolution"])
     units = slide.properties["tiff.ResolutionUnit"]
     store = tifffile.imread(ndpi_path, aszarr=True)
-    daskarray = dask.array.from_zarr(store, 0)
+    dask_array = dask.array.from_zarr(store, pyramid_level)
     store.close()
-    return daskarray, x_res, y_res, units
+    return dask_array, x_res, y_res, units
 
 # Calculate percent background in a patch to define removal threshold
 def percent_black(roi_array):
@@ -31,17 +32,13 @@ def percent_black(roi_array):
     percent_black = black / total_pixels * 100
     return percent_black
 
-def percent_background(roi_array, color_delta):
-    roi_width = roi_array.shape[0]
-    roi_height = roi_array.shape[1]
+def foreground_mask(dask_array, color_delta):
     white = np.array([255, 255, 255])
-    threshold = np.subtract(white, color_delta)
-    sub_threshold = np.subtract(roi_array, threshold)
-    sub_threshold = np.where(sub_threshold < 0, 0, sub_threshold)
-    num_background_pix = np.count_nonzero(np.all(sub_threshold, axis=2))
-    total_pixels = roi_width * roi_height
-    percent_background = num_background_pix / total_pixels * 100
-    return percent_background
+    threshold = white - color_delta
+    mask = dask_array > threshold
+    rgb_sum = mask.sum(axis = 2)
+    final_mask = rgb_sum == 3
+    return 1 - final_mask
 
 def extract_tiles(
     case, image_array, IMG_DIRECTORY, x_tile_size, y_tile_size, threshold, color_delta):
