@@ -39,12 +39,16 @@ axis_names = [
     "c^",
 ]
 # cortex vs medulla model info
-starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedulla/starting_model.pt"
-weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedulla/model9_epoch2.pt"
+cortmed_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/model5_epoch8.pt"
+cortmed_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
+
+# tissue vs background model info
+fgbg_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/starting_model.pt"
+fgbg_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/modelF8/train/modelF8_epoch3.pt"
 
 ###########
 
-# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
+"""# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
 for i in range(0, 4):
     # open the ndpi with openslide for info and tifffile as zarr
     dask_array, x_res, y_res, units = openndpi(ndpi_path,i)
@@ -61,7 +65,7 @@ for i in range(0, 4):
     # open pyramid level and assign appropriate voxel size and units to the dataset
     ds = zarr.open(zarr_path / "raw" / f"s{i}")
     ds.attrs["voxel_size"] = voxel_size
-    ds.attrs["units"] = units
+    ds.attrs["units"] = units"""
 
 # grab new zarr with reasonable chunks as dask array
 s3_array = open_ds(zarr_path / "raw" / "s3")
@@ -120,7 +124,7 @@ imask[:] = integral_mask
 
 # create patch mask: this marks every pixel that can be the starting pixel
 # of a patch of the defined patch size that will encompass mostly tissue
-patch_shape = Coordinate(150, 150)  # Will convention: shape in voxels
+patch_shape = Coordinate(150, 150)  # Will convention: shape in voxels started 150 x 150
 patch_size = patch_shape * imask.voxel_size  # size in nm
 patch_roi = Roi(imask.roi.offset, imask.roi.shape - patch_size)
 patch_counts = (
@@ -134,7 +138,7 @@ patch_count_mask = (
 )  # 50% of voxels are tissue
 
 # make grid on s3
-patch_spacing = Coordinate(100, 100)
+patch_spacing = Coordinate(100, 100) # was 100x100
 
 # very strange... why we give y shape then x shape... but it works
 grid_x, grid_y = np.meshgrid(
@@ -163,63 +167,53 @@ offsets = [
     for a, b in zip(*coords)
 ]
 
-s2_array = open_ds(zarr_path / "raw" / "s2")
-
-import time
+# apply foreground vs background model at 5x (s3)
+s3_array = open_ds(zarr_path / "raw" / "s3")
 
 with torch.no_grad():
     # load vgg16 weights
     checkpoint = torch.load(
-        weights_path, map_location=torch.device("cpu"), weights_only=False
+        fgbg_weights_path, map_location=torch.device("cpu"), weights_only=False
     )
     # load vgg16 architecture
     vgg16: torch.nn.Module = torch.load(
-        starting_model_path, map_location=torch.device("cpu"), weights_only=False
+        fgbg_starting_model_path, map_location=torch.device("cpu"), weights_only=False
     )
     # load weights into architecture
     vgg16.load_state_dict(checkpoint["model_state_dict"])
 
     # make dataset for mask 
     pred_mask = prepare_ds(
-        zarr_path / "mask" / "cortexmedulla",
-        s2_array.shape[0:2],
-        s2_array.offset,
-        s2_array.voxel_size,
-        s2_array.axis_names[0:2],
-        s2_array.units,
+        zarr_path / "mask" / "remove_artifacts",
+        s3_array.shape[0:2],
+        s3_array.offset,
+        s3_array.voxel_size,
+        s3_array.axis_names[0:2],
+        s3_array.units,
         mode="w",
         dtype=np.uint8,
     )
     # default pixel value to 2
-    pred_mask[:] = 2
+    pred_mask[:] = 3
 
     # for each patch, send to vgg16 and write label to mask
     for offset in tqdm(offsets):
-        t1 = time.time()
         # world units roi selection
         roi = Roi(offset, patch_size)
-        voxel_roi = (roi - s2_array.offset) / s2_array.voxel_size
-        patch_raw = s2_array[
+        voxel_roi = (roi - s3_array.offset) / s3_array.voxel_size
+        patch_raw = s3_array[
             voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
         ]
-        t2 = time.time()
         # format roi for vgg16
         in_data = T.Resize((224, 224))(
             torch.from_numpy(patch_raw).float().permute(2, 0, 1).unsqueeze(0) / 255
         )
-        t3 = time.time()
         # predict
         pred = vgg16(in_data).squeeze(0).numpy().argmax()
-        t4 = time.time()
 
         #  write to mask, accounting for roi overlap
         context = (patch_size - patch_spacing * s3_array.voxel_size) // 2
         slices = pred_mask._Array__slices(roi.grow(-context, -context))
         pred_mask._source_data[slices] = pred
 
-        # pred_mask[roi.grow(-context, -context)] = pred
-
-        t5 = time.time()
-        print(f"{t2-t1:.3}, {t3-t2:.3}, {t4-t3:.3}, {t5-t4:.3}")
-
-    # pred_mask[:] = pred_mask_tmp[:]
+exit()
