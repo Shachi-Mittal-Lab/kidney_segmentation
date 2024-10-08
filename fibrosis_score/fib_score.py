@@ -1,7 +1,5 @@
 import zarr.convenience
 from patch_utils_dask import openndpi, foreground_mask
-
-# from patch_utils import foreground_mask
 import dask
 import dask.array
 import zarr
@@ -23,11 +21,12 @@ from funlib.geometry import Coordinate, Roi
 
 # file inputs
 ndpi_path = Path(
-    "/home/riware/Desktop/loose_files/pathmltest/BR21-2074-B-A-1-9-TRICHROME - 2022-11-09 17.38.50.ndpi"
+    "/home/riware/Desktop/loose_files/pathmltest/BR21-2041-B-A-1-9-TRICHROME - 2022-11-09 16.31.43.ndpi"
 )
-zarr_path = Path("/home/riware/Desktop/loose_files/pathmltest/test.zarr")
-zarr_float_path = Path("/home/riware/Desktop/loose_files/pathmltest/test_floats.zarr")
+zarr_path = Path("/home/riware/Desktop/loose_files/pathmltest/21-2041.zarr")
+# zarr_float_path = Path("/home/riware/Desktop/loose_files/pathmltest/21-2014 A-1-9 Trich - 2021-03-22 15.13.35.zarr")
 
+png_path = Path("/home/riware/Desktop/loose_files/pathmltest/pngs")
 # background threshold
 threshold = 50
 # slide offset (zero)
@@ -39,8 +38,8 @@ axis_names = [
     "c^",
 ]
 # cortex vs medulla model info
-cortmed_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/model5_epoch8.pt"
-cortmed_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
+cortmed_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/model5_epoch8.pt"
+cortmed_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
 
 # tissue vs background model info
 fgbg_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/starting_model.pt"
@@ -89,7 +88,7 @@ dask.array.store(mask, store_fgbg)
 fill_hole_kernel = disk(
     15, decomposition="sequence"
 )  # sequence for computational efficiency
-shrink_kernel = disk(5, decomposition="sequence")
+shrink_kernel = disk(40, decomposition="sequence")
 mask_filled = binary_erosion(binary_dilation(mask, fill_hole_kernel), shrink_kernel)
 mask_filled_array = prepare_ds(
     zarr_path / "mask" / "foreground_filled",
@@ -101,7 +100,7 @@ mask_filled_array = prepare_ds(
     mode="w",
     dtype=np.uint8,
 )
-mask_filled_array[:] = mask_filled
+mask_filled_array._source_data[:] = mask_filled
 
 # create integral mask of filled foreground mask and save
 integral_mask = integral_image(mask_filled)
@@ -115,16 +114,11 @@ imask = prepare_ds(
     mode="w",
     dtype=np.uint64,
 )
-imask[:] = integral_mask
-
-## random grab from 10x for vgg16 - 300x300 10x
-# zarr_array0 = zarr.open(zarr_path / "raw" / "s0")
-# voxel_size = Coordinate(int(1/ 44114.0 * 2 ** 0 * 1e7) , int(1/ 44114.0 * 2 ** 0 * 1e7))
-# roi = Roi((3,8), (30000,30000)) * voxel_size # asking for 100 x 100 pixels in s2
+imask._source_data[:] = integral_mask
 
 # create patch mask: this marks every pixel that can be the starting pixel
 # of a patch of the defined patch size that will encompass mostly tissue
-patch_shape = Coordinate(150, 150)  # Will convention: shape in voxels started 150 x 150
+patch_shape = Coordinate(224, 224)  # Will convention: shape in voxels started 150 x 150
 patch_size = patch_shape * imask.voxel_size  # size in nm
 patch_roi = Roi(imask.roi.offset, imask.roi.shape - patch_size)
 patch_counts = (
@@ -138,7 +132,7 @@ patch_count_mask = (
 )  # 50% of voxels are tissue
 
 # make grid on s3
-patch_spacing = Coordinate(100, 100) # was 100x100
+patch_spacing = Coordinate(112, 112)  # was 100x100
 
 # very strange... why we give y shape then x shape... but it works
 grid_x, grid_y = np.meshgrid(
@@ -158,10 +152,10 @@ patch_mask = prepare_ds(
     mode="w",
     dtype=np.uint8,
 )
-patch_mask[:] = patch_count_mask * gridmask
+patch_mask._source_data[:] = patch_count_mask * gridmask
 # dask.array.store(patch_count_mask, store_patch_mask)
 
-coords = np.nonzero(patch_mask[:])
+coords = np.nonzero(patch_mask._source_data[:])
 offsets = [
     patch_mask.roi.offset + Coordinate(a, b) * patch_mask.voxel_size
     for a, b in zip(*coords)
@@ -173,16 +167,18 @@ s3_array = open_ds(zarr_path / "raw" / "s3")
 with torch.no_grad():
     # load vgg16 weights
     checkpoint = torch.load(
-        fgbg_weights_path, map_location=torch.device("cpu"), weights_only=False
+        cortmed_weights_path, map_location=torch.device("cpu"), weights_only=False
     )
     # load vgg16 architecture
     vgg16: torch.nn.Module = torch.load(
-        fgbg_starting_model_path, map_location=torch.device("cpu"), weights_only=False
+        cortmed_starting_model_path,
+        map_location=torch.device("cpu"),
+        weights_only=False,
     )
     # load weights into architecture
     vgg16.load_state_dict(checkpoint["model_state_dict"])
 
-    # make dataset for mask 
+    # make dataset for mask
     pred_mask = prepare_ds(
         zarr_path / "mask" / "remove_artifacts",
         s3_array.shape[0:2],
@@ -216,4 +212,77 @@ with torch.no_grad():
         slices = pred_mask._Array__slices(roi.grow(-context, -context))
         pred_mask._source_data[slices] = pred
 
-exit()
+    pred_mask._source_data[:] = pred_mask._source_data[:] == 1 
+
+# create patch mask: this marks every pixel that can be the starting pixel
+# of a patch of the defined patch size that will encompass mostly tissue
+patch_shape_final = Coordinate(
+    200, 200
+)  # Will convention: shape in voxels started 150 x 150
+patch_size_final = patch_shape_final * imask.voxel_size  # size in nm
+patch_roi_final = Roi(imask.roi.offset, imask.roi.shape - patch_size_final)
+patch_counts_final = (
+    imask[patch_roi_final]  # indexing with a roi gives you a plain numpy array
+    + imask[patch_roi_final + patch_size_final]
+    - imask[patch_roi_final + patch_size_final * Coordinate(0, 1)]
+    - imask[patch_roi_final + patch_size_final * Coordinate(1, 0)]
+)
+patch_count_mask_final = (
+    patch_counts_final >= patch_shape_final[0] * patch_shape_final[1] * 0.98
+)  # 98% of voxels are tissue
+
+# make grid on s3
+patch_spacing_final = Coordinate(100, 200)  # was 100x100
+
+# very strange... why we give y shape then x shape... but it works
+grid_x_final, grid_y_final = np.meshgrid(
+    range(patch_count_mask_final.shape[1]), range(patch_count_mask_final.shape[0])
+)
+gridmaskfinal = (
+    grid_x_final % patch_spacing_final[0] + grid_y_final % patch_spacing_final[1]
+)
+gridmaskfinal = gridmaskfinal == 0
+
+# create mask of pixels for possible starting pixels gien the ROI size and threshold
+patch_mask_final = prepare_ds(
+    zarr_path / "mask" / "patch_mask_final",
+    patch_count_mask_final.shape,
+    s3_array.offset,
+    s3_array.voxel_size,
+    s3_array.axis_names[0:2],
+    s3_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+
+patch_mask_final._source_data[:] = (
+    patch_count_mask_final[:]
+    * gridmaskfinal
+    * pred_mask._source_data[: -patch_shape_final[0], : -patch_shape_final[1]]
+)
+# dask.array.store(patch_count_mask, store_patch_mask)
+coords = np.nonzero(patch_mask_final._source_data[:])
+offsets_final = [
+    patch_mask_final.roi.offset + Coordinate(a, b) * patch_mask_final.voxel_size
+    for a, b in zip(*coords)
+]
+pyramid = [0, 1, 2, 3]
+for offset in offsets_final:
+    print(offset)
+    # world units roi selection
+    roi = Roi(offset, patch_size_final)
+    for level in pyramid:
+        patchname = f"{zarr_path.stem}_{offset}_pyr{level}.png"
+        patchpath = png_path / patchname
+        array = open_ds(zarr_path / "raw" / f"s{level}")
+        voxel_roi = (roi - array.offset) / array.voxel_size
+        patch_raw = array[
+            voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
+        ]
+        patch_raw = np.transpose(patch_raw, axes= (1, 0, 2))
+        patch_raw = patch_raw[:,:,::-1] #flip to rgb
+        cv2.imwrite(patchpath, patch_raw)
+    # grab omniseg output
+    # apply clustering
+    # save outputs to zarr
+    
