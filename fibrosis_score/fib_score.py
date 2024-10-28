@@ -15,6 +15,8 @@ import torchvision.transforms as T
 
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
+import daisy
+from dask.diagnostics import ProgressBar
 
 
 # inputs #
@@ -47,7 +49,7 @@ fgbg_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_sc
 
 ###########
 
-"""# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
+# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
 for i in range(0, 4):
     # open the ndpi with openslide for info and tifffile as zarr
     dask_array, x_res, y_res, units = openndpi(ndpi_path,i)
@@ -60,11 +62,19 @@ for i in range(0, 4):
     # storage info
     store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
     # store info with storage info
-    dask.array.store(dask_array, store_rgb)
+
+    # if image can be loaded in memory do this:
+    # store_rgb[:] = dask_array[:]
+    dask_array = dask_array.rechunk(raw.data.chunksize)
+    with ProgressBar():
+        dask_array.compute()
+    with ProgressBar():
+        dask.array.store(dask_array, store_rgb)
+
     # open pyramid level and assign appropriate voxel size and units to the dataset
     ds = zarr.open(zarr_path / "raw" / f"s{i}")
     ds.attrs["voxel_size"] = voxel_size
-    ds.attrs["units"] = units"""
+    ds.attrs["units"] = units
 
 # grab new zarr with reasonable chunks as dask array
 s3_array = open_ds(zarr_path / "raw" / "s3")
@@ -212,12 +222,12 @@ with torch.no_grad():
         slices = pred_mask._Array__slices(roi.grow(-context, -context))
         pred_mask._source_data[slices] = pred
 
-    pred_mask._source_data[:] = pred_mask._source_data[:] == 1 
+    pred_mask._source_data[:] = pred_mask._source_data[:] == 1
 
 # create patch mask: this marks every pixel that can be the starting pixel
 # of a patch of the defined patch size that will encompass mostly tissue
 patch_shape_final = Coordinate(
-    200, 200
+    150, 150
 )  # Will convention: shape in voxels started 150 x 150
 patch_size_final = patch_shape_final * imask.voxel_size  # size in nm
 patch_roi_final = Roi(imask.roi.offset, imask.roi.shape - patch_size_final)
@@ -228,11 +238,11 @@ patch_counts_final = (
     - imask[patch_roi_final + patch_size_final * Coordinate(1, 0)]
 )
 patch_count_mask_final = (
-    patch_counts_final >= patch_shape_final[0] * patch_shape_final[1] * 0.98
-)  # 98% of voxels are tissue
+    patch_counts_final >= patch_shape_final[0] * patch_shape_final[1] * 0.95
+)  # 95% of voxels are tissue
 
 # make grid on s3
-patch_spacing_final = Coordinate(100, 200)  # was 100x100
+patch_spacing_final = Coordinate(100, 100)  # was 100x100
 
 # very strange... why we give y shape then x shape... but it works
 grid_x_final, grid_y_final = np.meshgrid(
@@ -254,12 +264,12 @@ patch_mask_final = prepare_ds(
     mode="w",
     dtype=np.uint8,
 )
-
 patch_mask_final._source_data[:] = (
     patch_count_mask_final[:]
     * gridmaskfinal
     * pred_mask._source_data[: -patch_shape_final[0], : -patch_shape_final[1]]
 )
+
 # dask.array.store(patch_count_mask, store_patch_mask)
 coords = np.nonzero(patch_mask_final._source_data[:])
 offsets_final = [
@@ -267,10 +277,30 @@ offsets_final = [
     for a, b in zip(*coords)
 ]
 pyramid = [0, 1, 2, 3]
+
+# create visualization of regions pulled
+roi_mask = prepare_ds(
+    zarr_path / "mask" / "rois",
+    patch_count_mask.shape,
+    s3_array.offset,
+    s3_array.voxel_size,
+    s3_array.axis_names[0:2],
+    s3_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+roi_mask._source_data[:] = 0
+
 for offset in offsets_final:
     print(offset)
     # world units roi selection
     roi = Roi(offset, patch_size_final)
+    # visualize roi in mask
+    voxel_mask_roi = (roi - roi_mask.offset) / roi_mask.voxel_size
+    roi_mask._source_data[
+        voxel_mask_roi.begin[0] : voxel_mask_roi.end[0],
+        voxel_mask_roi.begin[1] : voxel_mask_roi.end[1],
+    ] = 1
     for level in pyramid:
         patchname = f"{zarr_path.stem}_{offset}_pyr{level}.png"
         patchpath = png_path / patchname
@@ -279,10 +309,10 @@ for offset in offsets_final:
         patch_raw = array[
             voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
         ]
-        patch_raw = np.transpose(patch_raw, axes= (1, 0, 2))
-        patch_raw = patch_raw[:,:,::-1] #flip to rgb
+        patch_raw = np.transpose(patch_raw, axes=(1, 0, 2))
+        patch_raw = patch_raw[:, :, ::-1]  # flip to rgb
         cv2.imwrite(patchpath, patch_raw)
+
     # grab omniseg output
     # apply clustering
     # save outputs to zarr
-    
