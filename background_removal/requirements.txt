@@ -1,8 +1,0 @@
-torch
-torchvision
-numpy
-pytest-shutil
-scikit-learn
-scikit-image
-openslide-python
-opencv-python

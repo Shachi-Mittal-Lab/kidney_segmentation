@@ -19,7 +19,6 @@ from sklearn.cluster import KMeans
 
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
-import daisy
 from dask.diagnostics import ProgressBar
 
 
@@ -420,7 +419,6 @@ for offset in offsets_final:
             # k means predict
             roi_gray_flat = np.expand_dims(roi_gray_flat, axis=1)
             prediction = clustering.predict(roi_gray_flat)
-
             # order centers from clustering for ease of color reassignment
             index = np.arange(0, n_clusters, 1).reshape(-1, 1)
             centers = np.hstack((index, clustering.cluster_centers_))

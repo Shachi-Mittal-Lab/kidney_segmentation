@@ -5,8 +5,6 @@ from PIL import Image
 from skimage import io
 import re
 from shutil import rmtree
-
-
 import tifffile
 import imagecodecs
 import openslide
