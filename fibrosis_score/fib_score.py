@@ -42,16 +42,30 @@ axis_names = [
     "c^",
 ]
 # cortex vs medulla model info
-cortmed_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/model5_epoch8.pt"
-cortmed_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
+cortmed_weights_path = Path(
+    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/model5_epoch8.pt"
+)
+cortmed_starting_model_path = Path(
+    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
+)
 
 # tissue vs background model info
-fgbg_starting_model_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/starting_model.pt"
-fgbg_weights_path = "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/modelF8/train/modelF8_epoch3.pt"
+fgbg_starting_model_path = Path(
+    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/starting_model.pt"
+)
+fgbg_weights_path = Path(
+    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/modelF8/train/modelF8_epoch3.pt"
+)
 
 # kmeans clustering centers
-gray_cluster_centers = "/home/riware/Documents/MittalLab/kidney_project/kidney_segmentation/fibrosis_score/average_centers_5.txt"
+gray_cluster_centers = Path(
+    "/home/riware/Documents/MittalLab/kidney_project/kidney_segmentation/fibrosis_score/average_centers_5.txt"
+)
 
+# omni-seg output path
+output_path = Path(
+    "/home/riware/Desktop/loose_files/f31_overlay_figure/outputs/BR22-2073-A-1-9-TRI - 2022-08-08 15.03.42_3"
+)
 ###########
 
 """# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
@@ -222,7 +236,7 @@ with torch.no_grad():
 
     pred_mask = open_ds(zarr_path / "mask" / "remove_artifacts")
     ## make dataset for mask
-    #pred_mask = prepare_ds(
+    # pred_mask = prepare_ds(
     #    zarr_path / "mask" / "remove_artifacts",
     #    s3_array.shape[0:2],
     #    s3_array.offset,
@@ -231,10 +245,10 @@ with torch.no_grad():
     #    s3_array.units,
     #    mode="w",
     #    dtype=np.uint8,
-    #)
+    # )
     ## default pixel value to 2
-    #pred_mask[:] = 3    # for each patch, send to vgg16 and write label to mask
-    #for offset in tqdm(offsets):
+    # pred_mask[:] = 3    # for each patch, send to vgg16 and write label to mask
+    # for offset in tqdm(offsets):
     #    # world units roi selection
     #    roi = Roi(offset, patch_size)
     #    voxel_roi = (roi - s3_array.offset) / s3_array.voxel_size
@@ -246,7 +260,7 @@ with torch.no_grad():
     #        torch.from_numpy(patch_raw).float().permute(2, 0, 1).unsqueeze(0) / 255
     #    )
     #    # predict
-    #    pred = vgg16(in_data).squeeze(0).numpy().argmax()        
+    #    pred = vgg16(in_data).squeeze(0).numpy().argmax()
     #    #  write to mask, accounting for roi overlap
     #    context = (patch_size - patch_spacing * s3_array.voxel_size) // 2
     #    slices = pred_mask._Array__slices(roi.grow(-context, -context))
@@ -381,6 +395,123 @@ structuralcollagen_mask = prepare_ds(
 )
 structuralcollagen_mask._source_data[:] = 0
 
+# create mask in zarr for proximal tubule class at 40x
+pt_mask = prepare_ds(
+    zarr_path / "mask" / "pt",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+pt_mask._source_data[:] = 0
+
+# create mask in zarr for distal tubule class at 40x
+dt_mask = prepare_ds(
+    zarr_path / "mask" / "dt",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+dt_mask._source_data[:] = 0
+
+# create mask in zarr for tuft class at 40x
+tuft_mask = prepare_ds(
+    zarr_path / "mask" / "tuft",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+tuft_mask._source_data[:] = 0
+
+# create mask in zarr for capsule class at 40x
+cap_mask = prepare_ds(
+    zarr_path / "mask" / "cap",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+cap_mask._source_data[:] = 0
+
+# create mask in zarr for peritubular capillaries class at 40x
+ptc_mask = prepare_ds(
+    zarr_path / "mask" / "ptc",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+ptc_mask._source_data[:] = 0
+
+# create mask in zarr for vessel class at 40x
+vessel_mask = prepare_ds(
+    zarr_path / "mask" / "vessel",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+vessel_mask._source_data[:] = 0
+
+# create mask for final fibrosis overlay at 40x
+finfib_mask = prepare_ds(
+    zarr_path / "mask" / "finfib",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+finfib_mask._source_data[:] = 0
+
+# create mask for final structural collagen overlay at 40x
+fincollagen_mask = prepare_ds(
+    zarr_path / "mask" / "fincollagen",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+fincollagen_mask._source_data[:] = 0
+
+# create mask for final inflammation overlay at 40x
+fininflamm_mask = prepare_ds(
+    zarr_path / "mask" / "fininflamm",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+fininflamm_mask._source_data[:] = 0
+
 for offset in offsets_final:
     print(offset)
     # world units roi selection
@@ -404,6 +535,7 @@ for offset in offsets_final:
         patch_raw = array[
             voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
         ]
+        # save png of image at current pyramid level
         patch_raw = np.transpose(patch_raw, axes=(1, 0, 2))
         patch_raw = patch_raw[:, :, ::-1]  # flip to rgb
         cv2.imwrite(patchpath, patch_raw)
@@ -446,13 +578,13 @@ for offset in offsets_final:
             fibrosis1 = labels == 1
             # connected components fib1
             structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
-            #labels, ncomponents = label(fibrosis1, structure)
-            #unique, counts = np.unique(labels, return_counts=True)
-            #small_obj = counts <= 200
-            #to_remove = unique[small_obj]
-            #small_obj_mask = np.isin(labels, to_remove)
-            #fibrosis1[small_obj_mask] = 0
-#
+            # labels, ncomponents = label(fibrosis1, structure)
+            # unique, counts = np.unique(labels, return_counts=True)
+            # small_obj = counts <= 200
+            # to_remove = unique[small_obj]
+            # small_obj_mask = np.isin(labels, to_remove)
+            # fibrosis1[small_obj_mask] = 0
+            #
             # visualize roi in mask, transpose to align
             fibrosis1_mask._source_data[
                 voxel_roi.begin[0] : voxel_roi.end[0],
@@ -462,13 +594,13 @@ for offset in offsets_final:
             # save fibrosis 2
             fibrosis2 = labels == 2
             # connected components fib2
-            #structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
-            #labels, ncomponents = label(fibrosis2, structure)
-            #unique, counts = np.unique(labels, return_counts=True)
-            #small_obj = counts <= 100
-            #to_remove = unique[small_obj]
-            #small_obj_mask = np.isin(labels, to_remove)
-            #fibrosis2[small_obj_mask] = 0
+            # structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
+            # labels, ncomponents = label(fibrosis2, structure)
+            # unique, counts = np.unique(labels, return_counts=True)
+            # small_obj = counts <= 100
+            # to_remove = unique[small_obj]
+            # small_obj_mask = np.isin(labels, to_remove)
+            # fibrosis2[small_obj_mask] = 0
             fibrosis2_mask._source_data[
                 voxel_roi.begin[0] : voxel_roi.end[0],
                 voxel_roi.begin[1] : voxel_roi.end[1],
@@ -479,7 +611,79 @@ for offset in offsets_final:
                 voxel_roi.begin[0] : voxel_roi.end[0],
                 voxel_roi.begin[1] : voxel_roi.end[1],
             ] = structural_collagen.T
-    # grab omniseg output
-    # apply clustering
-    # save outputs to zarr
+        else:
+            pass
+    # send all pyramid images of ROI to omni-seg and predict - Eric
 
+    # grab omni-seg output and write to zarr
+    dt_roimask = np.load(output_path / "0_1_dt" / "slice_pred_40X.npy")
+    dt_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = dt_roimask.T
+
+    pt_roimask = np.load(output_path / "1_1_pt" / "slice_pred_40X.npy")
+    pt_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = pt_roimask.T
+
+    cap_roimask = np.load(output_path / "2_0_capsule" / "slice_pred_40X.npy")
+    cap_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = cap_roimask.T
+
+    tuft_roimask = np.load(output_path / "3_0_tuft" / "slice_pred_40X.npy")
+    tuft_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = tuft_roimask.T
+
+    vessel_roimask = np.load(output_path / "4_1_vessel" / "slice_pred_40X.npy")
+    vessel_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = vessel_roimask.T
+
+    ptc_roimask = np.load(output_path / "5_3_ptc" / "slice_pred_40X.npy")
+    ptc_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = ptc_roimask.T
+
+    # delete omni-seg output files - Eric
+
+    # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
+    finfib = (
+        fibrosis1
+        * fibrosis2
+        * ~vessel_roimask
+        * ~dt_roimask
+        * ~pt_roimask
+        * ~cap_roimask
+        * ~tuft_roimask
+    )
+
+    finfib_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = finfib
+    # create final collagen overlay
+
+    # create final inflammation overlay
+    fininflamm = (
+        fibrosis1
+        * fibrosis2
+        * ~vessel_roimask
+        * ~dt_roimask
+        * ~pt_roimask
+        * ~cap_roimask
+        * ~tuft_roimask
+    )
+    fininflamm_mask._source_data[
+        voxel_roi.begin[0] : voxel_roi.end[0],
+        voxel_roi.begin[1] : voxel_roi.end[1],
+    ] = fininflamm
+
+    # calculate ROI fibrosis score & save to txt file
