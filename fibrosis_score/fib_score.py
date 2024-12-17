@@ -31,6 +31,9 @@ ndpi_path = Path(
 zarr_path = Path("/home/riware/Desktop/loose_files/pathmltest/21-2041.zarr")
 
 png_path = Path("/home/riware/Desktop/loose_files/pathmltest/pngs")
+
+txt_path = Path("/home/riware/Desktop/loose_files/pathmltest/fibscores.txt")
+
 # background threshold
 threshold = 50
 # slide offset (zero)
@@ -512,6 +515,10 @@ fininflamm_mask = prepare_ds(
 )
 fininflamm_mask._source_data[:] = 0
 
+# create text file for fibrosis score data
+with open(txt_path, "w") as f:
+    f.writelines("ROI fibrosis scores \n")
+
 for offset in offsets_final:
     print(offset)
     # world units roi selection
@@ -687,3 +694,7 @@ for offset in offsets_final:
     ] = fininflamm
 
     # calculate ROI fibrosis score & save to txt file
+    # total_tissue = foregroundmask * ~capsule * ~tuft * ~vessel
+    # score = finfib / total_tissue
+    # with open(os.path.join(MODEL_DATA_PATH, "test_cases.txt"), "w") as f:
+    #  f.writelines("\n".join(score))
