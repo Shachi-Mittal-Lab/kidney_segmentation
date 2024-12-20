@@ -52,14 +52,6 @@ cortmed_starting_model_path = Path(
     "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/cortexvsmedullavsartifact/starting_model.pt"
 )
 
-# tissue vs background model info
-fgbg_starting_model_path = Path(
-    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/starting_model.pt"
-)
-fgbg_weights_path = Path(
-    "/home/riware/Documents/MittalLab/kidney_project/fibrosis_score/omniseg/foregroundvsbackground/models/modelF8/train/modelF8_epoch3.pt"
-)
-
 # kmeans clustering centers
 gray_cluster_centers = Path(
     "/home/riware/Documents/MittalLab/kidney_project/kidney_segmentation/fibrosis_score/average_centers_5.txt"
@@ -238,37 +230,37 @@ with torch.no_grad():
     vgg16.load_state_dict(checkpoint["model_state_dict"])
 
     pred_mask = open_ds(zarr_path / "mask" / "remove_artifacts")
-    ## make dataset for mask
-    # pred_mask = prepare_ds(
-    #    zarr_path / "mask" / "remove_artifacts",
-    #    s3_array.shape[0:2],
-    #    s3_array.offset,
-    #    s3_array.voxel_size,
-    #    s3_array.axis_names[0:2],
-    #    s3_array.units,
-    #    mode="w",
-    #    dtype=np.uint8,
-    # )
-    ## default pixel value to 2
-    # pred_mask[:] = 3    # for each patch, send to vgg16 and write label to mask
-    # for offset in tqdm(offsets):
-    #    # world units roi selection
-    #    roi = Roi(offset, patch_size)
-    #    voxel_roi = (roi - s3_array.offset) / s3_array.voxel_size
-    #    patch_raw = s3_array[
-    #        voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
-    #    ]
-    #    # format roi for vgg16
-    #    in_data = T.Resize((224, 224))(
-    #        torch.from_numpy(patch_raw).float().permute(2, 0, 1).unsqueeze(0) / 255
-    #    )
-    #    # predict
-    #    pred = vgg16(in_data).squeeze(0).numpy().argmax()
-    #    #  write to mask, accounting for roi overlap
-    #    context = (patch_size - patch_spacing * s3_array.voxel_size) // 2
-    #    slices = pred_mask._Array__slices(roi.grow(-context, -context))
-    #    pred_mask._source_data[slices] = pred
-    #    pred_mask._source_data[:] = pred_mask._source_data[:] == 1
+    # make dataset for mask
+    pred_mask = prepare_ds(
+       zarr_path / "mask" / "remove_artifacts",
+       s3_array.shape[0:2],
+       s3_array.offset,
+       s3_array.voxel_size,
+       s3_array.axis_names[0:2],
+       s3_array.units,
+       mode="w",
+       dtype=np.uint8,
+    )
+    # default pixel value to 2
+    pred_mask[:] = 3    # for each patch, send to vgg16 and write label to mask
+    for offset in tqdm(offsets):
+       # world units roi selection
+       roi = Roi(offset, patch_size)
+       voxel_roi = (roi - s3_array.offset) / s3_array.voxel_size
+       patch_raw = s3_array[
+           voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
+       ]
+       # format roi for vgg16
+       in_data = T.Resize((224, 224))(
+           torch.from_numpy(patch_raw).float().permute(2, 0, 1).unsqueeze(0) / 255
+       )
+       # predict
+       pred = vgg16(in_data).squeeze(0).numpy().argmax()
+       #  write to mask, accounting for roi overlap
+       context = (patch_size - patch_spacing * s3_array.voxel_size) // 2
+       slices = pred_mask._Array__slices(roi.grow(-context, -context))
+       pred_mask._source_data[slices] = pred
+       pred_mask._source_data[:] = pred_mask._source_data[:] == 1
 
 # create patch mask: this marks every pixel that can be the starting pixel
 # of a patch of the defined patch size that will encompass mostly tissue
