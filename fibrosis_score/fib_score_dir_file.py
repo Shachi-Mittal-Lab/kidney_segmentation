@@ -23,48 +23,16 @@ from dask.diagnostics import ProgressBar
 import os #Eric edit
 import subprocess #Eric edit
 
-
-# inputs #
-
-# file inputs
-ndpi_path = Path(
-    "/media/mrl/Data/pipeline_connection/sample_data/BR21-2041-B-A-1-9-TRICHROME - 2022-11-09 16.31.43.ndpi" #Eric edit
-)
-zarr_path = Path("/media/mrl/Data/pipeline_connection/21-2041.zarr") #Eric edit
+#Eric edit
+import sys
+sys.path.append('/media/mrl/Data/pipeline_connection/kidney_segmentation')
+from directory_paths import ndpi_path, zarr_path, pipeline_path, png_path, txt_path, threshold, offset, axis_names, cortmed_weights_path, cortmed_starting_model_path, gray_cluster_centers, output_directory, path40x, path10x, path5x, omni_seg_path, subprocesswd
 
 #Eric edit:no pngs before it was created 
 os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
 
-png_path = Path("/media/mrl/Data/pipeline_connection/pngs") #Eric edit
-
-txt_path = Path("/media/mrl/Data/pipeline_connection/fibscores.txt") #Eric edit
-
-# background threshold
-threshold = 50
-# slide offset (zero)
-offset = (0, 0)
-# axis names
-axis_names = [
-    "x",
-    "y",
-    "c^",
-]
-# cortex vs medulla model info
-cortmed_weights_path = Path(
-    "/media/mrl/Data/pipeline_connection/cortexvsmedullavsothers/model5_epoch8.pt" #Eric edit
-)
-cortmed_starting_model_path = Path(
-    "/media/mrl/Data/pipeline_connection/cortexvsmedullavsothers/starting_model.pt" #Eric edit
-)
-
-# kmeans clustering centers
-gray_cluster_centers = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/fibrosis_score/average_centers_5.txt" #Eric edit
-)
-
-# omni-seg output path
-output_directory = f'/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu/output'
-#output_path = Path(f"{output_directory}/{os.listdir(output_directory)[0]}") #Eric edit
+# inputs #
+# import from directory_paths.py
 
 ###########
 
@@ -551,11 +519,11 @@ for offset in offsets_final:
         cv2.imwrite(str(patchpath), patch_raw) #saving the image to patchpath
         #Eric edit 12_23_2024
         if level == 0: #40x
-            cv2.imwrite(f'/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu/input/40X/{patchname}', patch_raw) #Eric edit
+            cv2.imwrite(f'{path40x}/{patchname}', patch_raw) #Eric edit
         if level == 2: #10x
-            cv2.imwrite(f'/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu/input/10X/{patchname}', patch_raw) #Eric edit
+            cv2.imwrite(f'{path10x}/{patchname}', patch_raw) #Eric edit
         if level == 3: #5x
-            cv2.imwrite(f'/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu/input/5X/{patchname}', patch_raw) #Eric edit
+            cv2.imwrite(f'{path5x}/{patchname}', patch_raw) #Eric edit
 
         # cluster 40x pyramid level
         if level == 0:
@@ -632,9 +600,9 @@ for offset in offsets_final:
             pass
     # send all pyramid images of ROI to omni-seg and predict - Eric
     #auto predict script path
-    omni_seg_path = '/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu/Auto_Omni_predict.py'
+    
     #run the script
-    subprocess.run(["python3", omni_seg_path], cwd='/media/mrl/Data/pipeline_connection/Omni_seg_pipeline_gpu', check=True)
+    subprocess.run(["python3", omni_seg_path], cwd= subprocesswd, check=True)
 
     output_path = Path(f"{output_directory}/{os.listdir(output_directory)[0]}") #Eric edit
 

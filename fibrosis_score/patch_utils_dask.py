@@ -12,7 +12,7 @@ import dask.array
 
 # Open ndpi as zarr array
 def openndpi(ndpi_path, pyramid_level):
-    slide = openslide.OpenSlide(ndpi_path)
+    slide = openslide.OpenSlide(str(ndpi_path)) #Eric edit
     x_res = float(slide.properties["tiff.XResolution"])
     y_res = float(slide.properties["tiff.YResolution"])
     units = slide.properties["tiff.ResolutionUnit"]
