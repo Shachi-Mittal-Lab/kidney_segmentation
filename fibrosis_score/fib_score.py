@@ -250,7 +250,6 @@ with torch.no_grad():
        dtype=np.uint8,
     )
 
-    
     # default pixel value to 2
     pred_mask[:] = 3    # for each patch, send to vgg16 and write label to mask
     for offset in tqdm(offsets):
