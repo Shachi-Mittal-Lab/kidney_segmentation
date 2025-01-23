@@ -1,3 +1,13 @@
+# outputs
+clinical_patches/
+final_merge/
+segmentation_merge/
+daisy_logs/
+
+# daisy logs
+.err
+.out
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

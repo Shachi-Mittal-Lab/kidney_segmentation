@@ -1,6 +1,4 @@
 import os
-import os.path as osp
-import time
 import argparse
 
 
@@ -9,13 +7,6 @@ import torch.distributed as dist
 
 from utils_engine.logger import get_logger
 from utils_engine.pyt_utils import all_reduce_tensor, extant_file
-
-try:
-    from apex.apex.parallel import DistributedDataParallel, SyncBatchNorm
-except ImportError:
-    raise ImportError(
-        "Please install apex from https://www.github.com/nvidia/apex .")
-
 
 logger = get_logger()
 
@@ -38,9 +29,6 @@ class Engine(object):
 
         self.continue_state_object = self.args.continue_fpath
 
-        # if not self.args.gpu == 'None':
-        #     os.environ["CUDA_VISIBLE_DEVICES"]=self.args.gpu
-
         if 'WORLD_SIZE' in os.environ:
             self.distributed = int(os.environ['WORLD_SIZE']) > 1
             print("WORLD_SIZE is %d" % (int(os.environ['WORLD_SIZE'])))
@@ -62,12 +50,10 @@ class Engine(object):
                        metavar="FILE",
                        dest="continue_fpath",
                        help='continue from one certain checkpoint')
-        # p.add_argument('--local_rank', default=0, type=int,
-        #                help='process rank on node')
 
     def data_parallel(self, model):
         if self.distributed:
-            model = DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model)
         else:
             model = torch.nn.DataParallel(model)
         return model

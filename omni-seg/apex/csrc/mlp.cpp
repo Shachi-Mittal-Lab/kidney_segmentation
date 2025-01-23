@@ -66,7 +66,7 @@ std::vector<at::Tensor> mlp_forward(int use_bias, int activation, std::vector<at
   // allocate fixed 4MB workspace for cublaslt for now, and this gets at least 4 MB
   auto lt_workspace = at::empty({1 << 22}, inputs[0].type());
 
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs[0].type(), "mlp_forward", [&] {
+  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs[0].scalar_type(), "mlp_forward", [&] {
     std::vector<scalar_t*> w_ptr;
     std::vector<scalar_t*> b_ptr;
     for (int i = 0; i < num_layers; i++) {
@@ -121,7 +121,7 @@ std::vector<at::Tensor> mlp_backward(
     outputs.push_back(at::empty(inputs[i].sizes(), inputs[i].type()));  // clone for testing now
   }
 
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs[0].type(), "mlp_backward", [&] {
+  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs[0].scalar_type(), "mlp_backward", [&] {
     std::vector<scalar_t*> w_ptr;
     for (int i = 0; i < num_layers; i++) {
       w_ptr.push_back(inputs[i + 1].data_ptr<scalar_t>());
@@ -160,7 +160,7 @@ std::vector<at::Tensor> mlp_backward(
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &mlp_forward, "MLP forward");
-  m.def("backward", &mlp_backward, "MLP backward");
+  m.def("forward", &mlp_forward, "MLP forward", py::call_guard<py::gil_scoped_release>());
+  m.def("backward", &mlp_backward, "MLP backward", py::call_guard<py::gil_scoped_release>());
 }
 

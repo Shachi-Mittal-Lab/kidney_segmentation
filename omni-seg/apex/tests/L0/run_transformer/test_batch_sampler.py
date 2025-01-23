@@ -1,10 +1,6 @@
-from itertools import product
-import unittest
-
 import torch
+from torch.testing._internal import common_utils
 from torch.utils.data import Dataset
-from torch.utils.data import RandomSampler
-from torch.utils.data import BatchSampler
 from torch.utils.data import DataLoader
 
 from apex.transformer.pipeline_parallel.utils import _split_batch_into_microbatch as split_batch_into_microbatch
@@ -80,28 +76,31 @@ class MegatronPretrainingRandomSampler:
 
 # Samples 8 tensors in total.
 # First sample 4 tensors twice, then sample 2 tensors fourth.
-class TestBatchSamplerBehavior(unittest.TestCase):
+class TestBatchSamplerBehavior(common_utils.TestCase):
+    def tearDown(self) -> None:
+        torch.cuda.empty_cache()
+        super().tearDown()
+
     def test_batch_sampler_behavior(self):
         dataset = MyIterableDataset(0, 100)
 
         for num_workers in (1, 2, 4):
-            with self.subTest(f"{num_workers}"):
-                torch.manual_seed(42)
-                loader = DataLoader(dataset, batch_sampler=MegatronPretrainingRandomSampler(100, 0, 4, 0, 1), num_workers=num_workers)
-                samples = []
-                for i, batch in enumerate(loader):
-                    samples.append(batch)
-                    if i == 2 - 1:
-                        break
+            torch.manual_seed(42)
+            loader = DataLoader(dataset, batch_sampler=MegatronPretrainingRandomSampler(100, 0, 4, 0, 1), num_workers=num_workers)
+            samples = []
+            for i, batch in enumerate(loader):
+                samples.append(batch)
+                if i == 2 - 1:
+                    break
 
-                torch.manual_seed(42)
-                loader = DataLoader(dataset, batch_sampler=MegatronPretrainingRandomSampler(100, 0, 2, 0, 1), num_workers=num_workers)
-                samples2 = []
-                for i, batch in enumerate(loader):
-                    samples2.append(batch)
-                    if i == 4 - 1:
-                        break
-                torch.testing.assert_allclose(torch.cat(samples), torch.cat(samples2))
+            torch.manual_seed(42)
+            loader = DataLoader(dataset, batch_sampler=MegatronPretrainingRandomSampler(100, 0, 2, 0, 1), num_workers=num_workers)
+            samples2 = []
+            for i, batch in enumerate(loader):
+                samples2.append(batch)
+                if i == 4 - 1:
+                    break
+            self.assertEqual(torch.cat(samples), torch.cat(samples2), msg=f"num_workers={num_workers}")
 
     def test_split_batch(self):
 
@@ -127,11 +126,6 @@ class TestBatchSamplerBehavior(unittest.TestCase):
         global_batch_size = 16
         loader = DataLoader(dataset, batch_sampler=MegatronPretrainingRandomSampler(100, 0, global_batch_size, 0, 1), num_workers=2)
         batch = next(iter(loader))
-        # samples = None
-        # for i, batch in enumerate(loader):
-        #     # samples = batch
-        #     if i == 0:
-        #         break
 
         for _micro_batch_size in (1, 2, 4, 8):
             microbatches = list(split_batch_into_microbatch(
@@ -139,11 +133,9 @@ class TestBatchSamplerBehavior(unittest.TestCase):
                 _micro_batch_size=_micro_batch_size,
                 _global_batch_size=global_batch_size,
             ))
-            # print(batch)
-            # print(microbatches)
             self.assertEqual(len(microbatches), global_batch_size // _micro_batch_size)
             self.assertEqual(len(microbatches[0][0]), _micro_batch_size)
 
 
 if __name__ == "__main__":
-    unittest.main()
+    common_utils.run_tests()

@@ -13,13 +13,13 @@
 
 
 // TODO:  Kernel arg size limit may be <4KB for some other cards (ie Jetson)
-constexpr int depth_to_max_tensors[5] = {110, 64, 48, 36, 30};
-constexpr int depth_to_max_blocks[5] = {320, 320, 320, 320, 320};
+constexpr int depth_to_max_tensors[6] = {110, 64, 48, 36, 30, 24};
+constexpr int depth_to_max_blocks[6] = {320, 320, 320, 320, 320, 320};
 
 template<int n> struct TensorListMetadata
 {
   void* addresses[n][depth_to_max_tensors[n-1]];
-  int sizes[depth_to_max_tensors[n-1]];
+  int64_t sizes[depth_to_max_tensors[n-1]];
   unsigned char block_to_tensor[depth_to_max_blocks[n-1]];
   int block_to_chunk[depth_to_max_blocks[n-1]]; // I fear this needs to be a full int.
   int start_tensor_this_launch;
@@ -28,7 +28,7 @@ template<int n> struct TensorListMetadata
 
 template<typename T, typename U, typename... ArgTypes>
 __global__ void multi_tensor_apply_kernel(
-    int chunk_size,
+    int64_t chunk_size,
     volatile int* noop_flag,
     T tl,
     U callable,
@@ -40,8 +40,8 @@ __global__ void multi_tensor_apply_kernel(
 
 template<int depth, typename T, typename... ArgTypes>
 void multi_tensor_apply(
-  int block_size,
-  int chunk_size,
+  int64_t block_size,
+  int64_t chunk_size,
   const at::Tensor& noop_flag,
   const std::vector<std::vector<at::Tensor>>& tensor_lists,
   T callable,
@@ -85,9 +85,9 @@ void multi_tensor_apply(
       tl.addresses[d][loc_tensor_info] = tensor_lists[d][t].data_ptr();
     loc_tensor_info++;
 
-    int chunks_this_tensor = (tensor_lists[0][t].numel() + chunk_size - 1)/chunk_size;
+    auto chunks_this_tensor = (tensor_lists[0][t].numel() + chunk_size - 1)/chunk_size;
 
-    for(int chunk = 0; chunk < chunks_this_tensor; chunk++)
+    for(auto chunk = 0; chunk < chunks_this_tensor; chunk++)
     {
       // std::cout << chunks_this_tensor << std::endl;
       tl.block_to_tensor[loc_block_info] = loc_tensor_info - 1;

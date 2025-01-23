@@ -1,5 +1,7 @@
 #include <torch/extension.h>
 
+#include <string>
+
 // CUDA forward declarations
 
 std::vector<at::Tensor> softmax_xentropy_cuda(
@@ -17,8 +19,8 @@ at::Tensor softmax_xentropy_backward_cuda(
 
 // C++ interface
 
-#define CHECK_CUDA(x) AT_ASSERTM(x.type().is_cuda(), #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) AT_ASSERTM(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_CUDA(x) TORCH_CHECK(x.is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
 std::vector<at::Tensor> softmax_xentropy_forward(
@@ -47,6 +49,15 @@ at::Tensor softmax_xentropy_backward(
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("forward", &softmax_xentropy_forward, "Softmax cross entropy loss with label smoothing forward (CUDA)");
-    m.def("backward", &softmax_xentropy_backward, "Softmax cross entropy loss with label smoothing backward (CUDA)");
+    m.def("forward", &softmax_xentropy_forward, "Softmax cross entropy loss with label smoothing forward (CUDA)", py::call_guard<py::gil_scoped_release>());
+    m.def("backward", &softmax_xentropy_backward, "Softmax cross entropy loss with label smoothing backward (CUDA)", py::call_guard<py::gil_scoped_release>());
+    // ref: https://pybind11.readthedocs.io/en/stable/basics.html#exporting-variables
+    py::object version = py::cast(
+#ifdef XENTROPY_VER
+        XENTROPY_VER
+#else
+        std::string{}
+#endif
+        );
+    m.attr("__version__") = version;
 }

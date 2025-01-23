@@ -21,7 +21,7 @@ import timeit
 import loss_2D as loss
 
 from engine import Engine
-from apex.apex import amp
+from apex import amp
 from sklearn.metrics import f1_score
 
 start = timeit.default_timer()
@@ -51,10 +51,10 @@ def get_arguments(img, output_folder):
     parser.add_argument("--valset_dir", type=str, default=img + '/data_list.csv')
     parser.add_argument("--output_dir", type=str, default=output_folder)
 
-    parser.add_argument("--snapshot_dir", type=str, default='snapshots_2D/fold1_with_white_UNet2D_ns_normalwhole_1106')
+    parser.add_argument("--snapshot_dir", type=str, default='snapshots_2D/256_train_ratio_exp_v2_ves_no_epith_checkpoint_test_to_train')
     parser.add_argument("--reload_path", type=str,
-                        default='snapshots_2D/fold1_with_white_Omni-Seg_normalwhole_1201/MOTS_DynConv_fold1_with_white_scale_psuedo_allMatching_withsemi_0.1_0.1_normalwhole_0217_e81.pth')
-    parser.add_argument("--best_epoch", type=int, default=100)
+                        default='snapshots_2D/256_train_ratio_exp_v2_ves_no_epith_checkpoint_test_to_train/MOTS_DynConv_256_train_ratio_exp_v2_ves_no_epith_checkpoint_test_to_train_e209.pth')
+    parser.add_argument("--best_epoch", type=int, default=357)
 
     # parser.add_argument("--validsetname", type=str, default='scale')
     parser.add_argument("--validsetname", type=str, default='normal')
@@ -447,8 +447,10 @@ def testing_40X(imgs_40X, now_task, now_scale, volumeName, patch_size, batch_siz
     np.save(os.path.join(output_folder, 'Big_pred.npy'), prediction, allow_pickle=True)
 
 def main(img, output_dir, case_name):
+    print("Starting step 2 main")
 
     output_folder = os.path.join(output_dir, case_name)
+    print(f"step 2 output folder  is: {output_folder}")
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -647,18 +649,14 @@ def natural_keys(text):
 
 if __name__ == '__main__':
 
-    docker = 0
-
-    if docker:
-        data_dir = '/desktop/src/extra/OmniSeg_MouthKidney_Pipeline/clinical_patches/'
-        output_dir = '/desktop/src/extra/OmniSeg_MouthKidney_Pipeline/segmentation_merge/'
-    else:
-        data_dir = '/home/lengh2/Desktop/Haoju_Leng/DockerFiles/test/src/extra/OmniSeg_MouthKidney_Pipeline/clinical_patches/'
-        output_dir = '/home/lengh2/Desktop/Haoju_Leng/DockerFiles/test/src/extra/OmniSeg_MouthKidney_Pipeline/segmentation_merge/'
-
+    data_dir = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/clinical_patches'
+    output_dir = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/segmentation_merge'
+    
     cases = glob.glob(os.path.join(data_dir, '*'))
     cases.sort(key=natural_keys)
-
+    print("Starting step 2")
+    print(f"output dir: {output_dir}")
+    print(f"cases: {cases}")
     for now_case in cases:
         case_name = os.path.basename(now_case)
         main(now_case, output_dir, case_name)

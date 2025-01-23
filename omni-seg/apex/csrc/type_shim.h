@@ -112,6 +112,38 @@
   }
 
 
+#define DISPATCH_DOUBLE_FLOAT_HALF_AND_BFLOAT(TYPE, LEVEL, NAME, ...) \
+  switch(TYPE) \
+  { \
+    case at::ScalarType::Double: \
+    { \
+      using scalar_t_##LEVEL = double; \
+      __VA_ARGS__; \
+      break; \
+    } \
+    case at::ScalarType::Float: \
+    { \
+      using scalar_t_##LEVEL = float; \
+      __VA_ARGS__; \
+      break; \
+    } \
+    case at::ScalarType::Half: \
+    { \
+      using scalar_t_##LEVEL = at::Half; \
+      __VA_ARGS__; \
+      break; \
+    } \
+    case at::ScalarType::BFloat16: \
+    { \
+      using scalar_t_##LEVEL = at::BFloat16; \
+      __VA_ARGS__; \
+      break; \
+    } \
+    default: \
+      AT_ERROR(#NAME, " not implemented for '", toString(TYPE), "'");  \
+  }
+
+
   #define DISPATCH_DOUBLE_AND_FLOAT(TYPE, LEVEL, NAME, ...) \
   switch(TYPE) \
   { \
@@ -330,8 +362,9 @@ __device__ __forceinline__ T reduce_block_into_lanes
     if(tid < lanes)
       x[tid] = final; // EpilogueOp
     // Make sure the smem result is visible to all warps.
-    __syncthreads();
   }
+  __syncthreads();
+  // Avoid potential write before read race when reduce_block_into_lanes is called back to back
 
   return final;
 }
