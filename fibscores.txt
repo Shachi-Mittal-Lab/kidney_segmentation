@@ -1,1 +1,2 @@
 ROI fibrosis scores 
+Final score: 23.981803099620606

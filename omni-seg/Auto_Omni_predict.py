@@ -22,6 +22,21 @@ Pro: checks which image has been run
 Con: not to the level of individual annoation
 However, good first stage to work on
 '''
+def clean_dirs(directory):
+    contents = os.listdir(directory)
+    print(f"{directory} output contents: {contents}")
+    for item in contents:
+        if item in ["clinical_patches", "final_merge", "segmentation_merge"]:
+            print(f"deleting folder {item}")
+            shutil.rmtree(os.path.join(directory, item))
+            print(f"remaking folder {item}")
+            os.mkdir(os.path.join(directory, item))
+        elif os.path.isdir(os.path.join(directory, item)):
+            print(f"Deleting folder {item}")
+            shutil.rmtree(os.path.join(directory, item))
+        else:
+            print(f"Deleting {item}")
+            os.remove(os.path.join(directory, item))
 
 def main():
     '''
@@ -30,24 +45,6 @@ def main():
     monitor_thread.daemon = True
     monitor_thread.start()
     '''
-    # remove all contents of folder
-    # unless it is the clinical patches, final_merge, or segmentation merge folders
-    # instead step inside of these folders and delete the contents
-    def clean_dirs(directory):
-        contents = os.listdir(directory)
-        print(f"{directory} output contents: {contents}")
-        for item in contents:
-            if item in ["clinical_patches", "final_merge", "segmentation_merge"]:
-                print(f"deleting folder {item}")
-                shutil.rmtree(os.path.join(directory, item))
-                print(f"remaking folder {item}")
-                os.mkdir(os.path.join(directory, item))
-            elif os.path.isdir(os.path.join(directory, item)):
-                print(f"Deleting folder {item}")
-                shutil.rmtree(os.path.join(directory, item))
-            else:
-                print(f"Deleting {item}")
-                os.remove(os.path.join(directory, item))
 
     #clean output dirs if there was a run prior
     clean_dirs(output_directory)

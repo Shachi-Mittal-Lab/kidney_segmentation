@@ -9,11 +9,13 @@ import cv2
 from tqdm import tqdm
 from skimage.transform import integral_image
 from skimage.morphology import binary_erosion, binary_dilation, disk
+from skimage.filters import gaussian
 from scipy.ndimage import label
+from skimage import measure
 import daisy
 
 from pathlib import Path
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as pltS
 import torch
 import torchvision.transforms as T
 from sklearn.cluster import KMeans
@@ -21,6 +23,7 @@ from sklearn.cluster import KMeans
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 from dask.diagnostics import ProgressBar
+from dask.array import coarsen, mean
 import os  # Eric edit
 import subprocess  # Eric edit
 
@@ -47,45 +50,88 @@ from directory_paths import (
 # Eric edit:no pngs before it was created
 os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
 
-# inputs #
-# import from directory_paths.py
-
 ###########
 
 # convert ndpi to zarr array levels 40x, 20x, 10x, 5x
-#for i in range(0, 4):
-#    # open the ndpi with openslide for info and tifffile as zarr
-#    dask_array, x_res, y_res, units = openndpi(ndpi_path, i)
-#    # define units in nm since native is cm and then you get a (0,0) res
-#    units = ("nm", "nm")
-#    # grab resolution in cm, convert to nm, calculate for each pyramid level
-#    voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
-#    # format data as funlib dataset
-#    raw = prepare_ds(
-#        zarr_path / "raw" / f"s{i}",
-#        dask_array.shape,
-#        offset,
-#        voxel_size,
-#        axis_names,
-#        units,
-#        dtype=np.uint8,
-#    )
-#    # storage info
-#    store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
-#    # store info with storage info
-#
-#    # if image can be loaded in memory do this:
-#    # store_rgb[:] = dask_array[:]
-#    dask_array = dask_array.rechunk(raw.data.chunksize)
-#    with ProgressBar():
-#        dask_array.compute()
-#    with ProgressBar():
-#        dask.array.store(dask_array, store_rgb)
-#
-#    # open pyramid level and assign appropriate voxel size and units to the dataset
-#    ds = zarr.open(zarr_path / "raw" / f"s{i}")
-#    ds.attrs["voxel_size"] = voxel_size
-#    ds.attrs["units"] = units
+
+# open highest pyramid level
+dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
+s0_shape = dask_array0.shape
+units = ("nm", "nm")
+# grab resolution in cm, convert to nm, calculate for each pyramid level
+voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
+# format data as funlib dataset
+raw = prepare_ds(
+    zarr_path / "raw" / "s0",
+    dask_array0.shape,
+    offset,
+    voxel_size0,
+    axis_names,
+    units,
+    mode="w",
+    dtype=np.uint8,
+)
+# storage info
+store_rgb = zarr.open(zarr_path / "raw" / "s0")
+dask_array = dask_array0.rechunk(raw.data.chunksize)
+
+with ProgressBar():
+    dask.array.store(dask_array, store_rgb)
+
+for i in range(1, 4):
+    # open the ndpi with openslide for info and tifffile as zarr
+    dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
+    # grab resolution in cm, convert to nm, calculate for each pyramid level
+    voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
+    expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
+    print(f"expected shape: {expected_shape}")
+    print(f"actual shape: {dask_array.shape}")
+
+    # check shape is expected shape 
+    if dask_array.shape == expected_shape:
+        print("correct shape")
+        # format data as funlib dataset
+        raw = prepare_ds(
+            zarr_path / "raw" / f"s{i}",
+            dask_array.shape,
+            offset,
+            voxel_size,
+            axis_names,
+            units,
+            mode="w",
+            dtype=np.uint8,
+        )
+        # storage info
+        store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
+        dask_array = dask_array.rechunk(raw.data.chunksize)
+
+        with ProgressBar():
+            dask.array.store(dask_array, store_rgb)
+
+    else:
+        voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
+        # format data as funlib dataset
+        raw = prepare_ds(
+            zarr_path / "raw" / f"s{i}",
+            expected_shape,
+            offset,
+            voxel_size,
+            axis_names,
+            units,
+            mode="w",
+            dtype=np.uint8,
+        )
+        # storage info
+        store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
+        prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
+        print(f"chunk shape: {prev_layer.chunk_shape}")
+
+        # mean downsampling
+        dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
+
+        # save to zarr
+        with ProgressBar():
+            dask.array.store(dask_array, store_rgb)
 
 # grab new zarr with reasonable chunks as dask array
 s3_array = open_ds(zarr_path / "raw" / "s3")
@@ -274,7 +320,7 @@ icmask._source_data[:] = integral_cortex_mask
 # of a patch of the defined patch size that will encompass mostly tissue
 patch_shape_final = Coordinate(
     512, 512
-)  # Will convention: shape in voxels started 150 x 150
+)  # Will convention: shape in voxels started 150 x 150 omni-seg input WAS 512/1024 
 patch_size_final = patch_shape_final * icmask.voxel_size  # size in nm
 patch_roi_final = Roi(icmask.roi.offset, icmask.roi.shape - patch_size_final)
 patch_counts_final = (
@@ -284,11 +330,11 @@ patch_counts_final = (
     - icmask[patch_roi_final + patch_size_final * Coordinate(1, 0)]
 )
 patch_count_mask_final = (
-    patch_counts_final >= patch_shape_final[0] * patch_shape_final[1] * 0.30
-)  # 30% of voxels are cortex
+    patch_counts_final >= patch_shape_final[0] * patch_shape_final[1] * 0.10
+)  # 10% of voxels are cortex
 
 # make grid on s3
-patch_spacing_final = Coordinate(256, 256)  # was 100x100
+patch_spacing_final = Coordinate(256, 256)  # was 256x256/512 #TRY CHANGING THIS THIS TIME
 
 # very strange... why we give y shape then x shape... but it works
 grid_x_final, grid_y_final = np.meshgrid(
@@ -379,6 +425,45 @@ inflammation_mask = prepare_ds(
     dtype=np.uint8,
 )
 inflammation_mask._source_data[:] = 0
+
+# create visualization of tbm - mixing tubule dilation & structural collagen cluster
+tbm_mask = prepare_ds(
+    zarr_path / "mask" / "tbm",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+tbm_mask._source_data[:] = 0
+
+# create visualization of tbm - mixing tubule dilation & structural collagen cluster
+bc_mask = prepare_ds(
+    zarr_path / "mask" / "bc",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+bc_mask._source_data[:] = 0
+
+# create visualization of tbm - mixing tubule dilation & structural collagen cluster
+fincap_mask = prepare_ds(
+    zarr_path / "mask" / "fincap",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+fincap_mask._source_data[:] = 0
 
 # create visualization of structural collagen cluster
 structuralcollagen_mask = prepare_ds(
@@ -514,8 +599,7 @@ fininflamm_mask._source_data[:] = 0
 with open(txt_path, "w") as f:
     f.writelines("ROI fibrosis scores \n")
 
-for offset in offsets_final:
-    print(f"offset: {offset} of {len(offsets_final)}")
+for offset in tqdm(offsets_final):
     # world units roi selection
     roi = Roi(offset, patch_size_final)  # in nm
     # visualize roi in mask
@@ -532,7 +616,7 @@ for offset in offsets_final:
     # select roi
     array = open_ds(zarr_path / "raw" / f"s0")
     # redefine roi on s0 array
-    patch_shape_final = Coordinate(4096,4096)
+    patch_shape_final = Coordinate(4096,4096) #omniseg input was 4096/8192
     patch_size_final = patch_shape_final * array.voxel_size # nm
     roi = Roi(offset, patch_size_final) # nm
     voxel_roi = (roi - array.offset) / array.voxel_size # voxels
@@ -564,39 +648,39 @@ for offset in offsets_final:
         [x[1] for x in sorted(zip(new_order, index))], dtype=int
     ).reshape(-1, 1)
     # updated labels
-    labels = mapping[prediction].reshape(roi_gray.shape)
+    class_labels = mapping[prediction].reshape(roi_gray.shape)
     # save centers
     final_centers = np.uint8(ordered_centers[:, 1:])
     # save inflammation 4
-    inflammation = labels == 4
+    inflammation = class_labels == 4
     # visualize roi in mask, transpose to align
     inflammation_mask._source_data[
         voxel_roi.begin[0] : voxel_roi.end[0],
         voxel_roi.begin[1] : voxel_roi.end[1],
     ] = inflammation.T
     # save fibrosis 1
-    fibrosis1 = labels == 1
+    fibrosis1 = class_labels == 1
     # connected components fib1
     structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
     labels, ncomponents = label(fibrosis1, structure)
     unique, counts = np.unique(labels, return_counts=True)
-    small_obj = counts <= 100
+    small_obj = counts <= 50
     to_remove = unique[small_obj]
     small_obj_mask = np.isin(labels, to_remove)
     fibrosis1[small_obj_mask] = 0
-    #
+    
     # visualize roi in mask, transpose to align
     fibrosis1_mask._source_data[
         voxel_roi.begin[0] : voxel_roi.end[0],
         voxel_roi.begin[1] : voxel_roi.end[1],
     ] = fibrosis1.T
     # save fibrosis 2
-    fibrosis2 = labels == 2
+    fibrosis2 = class_labels == 2
     # connected components fib2
     structure = np.ones((3, 3), dtype=np.int8)  # allows any connectio
     labels, ncomponents = label(fibrosis2, structure)
     unique, counts = np.unique(labels, return_counts=True)
-    small_obj = counts <= 100
+    small_obj = counts <= 50
     to_remove = unique[small_obj]
     small_obj_mask = np.isin(labels, to_remove)
     fibrosis2[small_obj_mask] = 0
@@ -604,8 +688,9 @@ for offset in offsets_final:
         voxel_roi.begin[0] : voxel_roi.end[0],
         voxel_roi.begin[1] : voxel_roi.end[1],
     ] = fibrosis2.T
+
     # save structural collagen 3
-    structural_collagen = labels == 3
+    structural_collagen = class_labels == 3
     structuralcollagen_mask._source_data[
         voxel_roi.begin[0] : voxel_roi.end[0],
         voxel_roi.begin[1] : voxel_roi.end[1],
@@ -613,8 +698,9 @@ for offset in offsets_final:
 
     # send 40x image to omni-seg to predict
     subprocess.run(["python3", omni_seg_path], cwd=subprocesswd, check=True)
-    
+
     output_path = Path(output_directory) / "final_merge" / patchname.stem
+
     # grab omni-seg output and write to zarr
     dt_roimask = np.load(output_path / "0_1_dt" / "slice_pred_40X.npy")
     dt_roimask = dt_roimask[:,:,0]
@@ -664,7 +750,6 @@ for offset in offsets_final:
         voxel_roi.begin[1] : voxel_roi.end[1],
     ] = ptc_roimask.T
 
-    # delete omni-seg output files - Eric
 
 # grab arrays that were already calc - TEMP SECTION
 vessel_roimask = open_ds(zarr_path / "mask" / "vessel")
@@ -672,69 +757,258 @@ dt_roimask = open_ds(zarr_path / "mask" / "dt")
 pt_roimask = open_ds(zarr_path / "mask" / "pt")
 cap_roimask = open_ds(zarr_path / "mask" / "cap")
 tuft_roimask = open_ds(zarr_path / "mask" / "tuft")
-inflammation_roimask = open_ds(zarr_path / "mask" / "inflammation")
+inflammation = open_ds(zarr_path / "mask" / "inflammation")
 fibrosis1 = open_ds(zarr_path / "mask" / "fibrosis1")
 fibrosis2 = open_ds(zarr_path / "mask" / "fibrosis2")
 finfib = open_ds(zarr_path / "mask" / "finfib", "r+")
-fininflamm = open_ds(zarr_path / "mask" / "fininflamm")
+fininflamm = open_ds(zarr_path / "mask" / "fininflamm", "r+")
+structural_collagen = open_ds(zarr_path / "mask" / "structuralcollagen")
+fincollagen = open_ds(zarr_path / "mask" / "fincollagen", "r+")
+fincap = open_ds(zarr_path / "mask" / "fincap", "r+")
+bc = open_ds(zarr_path / "mask" / "bc", "r+")
 
-# save dask to zarr in a standard way
+# scale eroded foreground mask to 40x from 5x for final multiplications
+fg_eroded = open_ds(zarr_path / "mask" / "foreground_eroded")  # in s3
+upsampling_factor = fg_eroded.voxel_size / vessel_roimask.voxel_size
+fg_eroded_s0 = prepare_ds(
+    zarr_path / "mask" / "foreground_eroded_s0",
+    shape=Coordinate(fg_eroded.shape) * upsampling_factor,
+    offset=fg_eroded.offset,
+    voxel_size=vessel_roimask.voxel_size,
+    axis_names=fg_eroded.axis_names,
+    units=fg_eroded.units,
+    mode="w",
+    dtype=fg_eroded.dtype,
+)
 
+# upsample 5x eroded tissue mask to use to filter predictions
+def upsample_block(block: daisy.Block):
+    s3_data = fg_eroded[block.read_roi]
+    s0_data = s3_data
+    for axis, reps in enumerate(upsampling_factor):
+        s0_data = np.repeat(s0_data, reps, axis=axis)
+    fg_eroded_s0[block.write_roi] = s0_data
+
+block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
+upsample_task = daisy.Task(
+    "blockwise_upsample",
+    total_roi=s0_array.roi,
+    read_roi=block_roi,
+    write_roi=block_roi,
+    read_write_conflict=False,
+    num_workers=2,
+    process_function=upsample_block,
+)
+daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)
+
+fg_eroded_s0 = open_ds(zarr_path / "mask" / "foreground_eroded_s0")  # in s0
+
+# need to erode and dilate to generate a TBM class
+erode_kernel = disk(
+    2, decomposition="sequence"
+)
+dilate_kernel = disk(
+    15, decomposition="sequence"
+)  # sequence for computational efficiency
+
+def tbm_block(block: daisy.Block):
+    pt_data = dt_roimask[block.read_roi]
+    dt_data = pt_roimask[block.read_roi]
+    cluster = structural_collagen[block.read_roi]
+    tubules = pt_data + dt_data
+    eroded_tubules = binary_erosion(tubules, erode_kernel)
+    tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
+    tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster
+    tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
+    tbm_mask[block.write_roi] = tbm
+
+block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
+tbm_task = daisy.Task(
+    "ID TBM",
+    total_roi=s0_array.roi,
+    read_roi=block_roi,
+    write_roi=block_roi,
+    read_write_conflict=False,
+    num_workers=2,
+    process_function=tbm_block,
+)
+daisy.run_blockwise(tasks=[tbm_task], multiprocessing=False)
+
+tbm = open_ds(zarr_path / "mask" / "tbm")
+
+structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
+
+# clean cap class
+structure = np.ones((3, 3), dtype=np.int8)  # allows any connection
+erode_kernel = disk(
+    40, decomposition="sequence"
+)
+dilate_kernel = disk(
+    17, decomposition="sequence"
+)  # sequence for computational efficiency
+
+def filter_circular_objects(mask, circularity_threshold=0.2):
+    labeled_mask = measure.label(mask)
+    output_mask = np.zeros(mask.shape, dtype = np.uint8)
+
+    for region in measure.regionprops(labeled_mask):
+        
+        perimeter = region.perimeter if region.perimeter > 0 else 1
+        circularity = (4 * np.pi * region.area) / (perimeter ** 2)
+
+        if circularity >= circularity_threshold:
+            output_mask[labeled_mask == region.label] = True
+
+    return output_mask
+
+def cap_block(block: daisy.Block):
+    cap_data = cap_roimask[block.read_roi]
+    # connected components capsule
+    labels, ncomponents = label(cap_data, structure)
+    unique, counts = np.unique(labels, return_counts=True)
+    small_obj = counts <= 150000
+    to_remove = unique[small_obj]
+    small_obj_mask = np.isin(labels, to_remove)
+    cap_data[small_obj_mask] = 0
+    # filter for only circular objects
+    cap_data = filter_circular_objects(cap_data.astype(float))
+    fincap[block.write_roi] = cap_data
+    # find Bowman's Capsule w/ cap & structural collagen overlap
+    cluster = structural_collagen[block.read_roi]
+    tbm_collagen = tbm[block.read_roi]
+    eroded_caps = binary_erosion(cap_data, erode_kernel)
+    dilated_caps = binary_dilation(cap_data, dilate_kernel)
+    bc_id = dilated_caps * (1 - eroded_caps) * (1 - tbm_collagen) * cluster
+    bc_smooth = gaussian(bc_id.astype(float), sigma=2.0) > 0.5
+    bc[block.write_roi] = bc_smooth
+
+block_roi = Roi((0, 0), (4000, 4000)) * fg_eroded_s0.voxel_size
+cap_task = daisy.Task(
+    "Clean Capsule Class",
+    total_roi=s0_array.roi,
+    read_roi=block_roi,
+    write_roi=block_roi,
+    read_write_conflict=False,
+    num_workers=2,
+    process_function=cap_block,
+)
+daisy.run_blockwise(tasks=[cap_task], multiprocessing=False)
+
+# blockwise mask multiplications
 #def process_block(block: daisy.Block):
 #    # in data 
-#    #vessel = vessel_roimask[block.read_roi]
-#    #dt = dt_roimask[block.read_roi]
-#    #pt = pt_roimask[block.read_roi]
+#    vessel = vessel_roimask[block.read_roi]
+#    dt = dt_roimask[block.read_roi]
+#    pt = pt_roimask[block.read_roi]
 #    cap = cap_roimask[block.read_roi]
 #    #tuft = tuft_roimask[block.read_roi]
-#    #inflammation = inflammation_roimask[block.read_roi]
+#    #inflammation = inflammation[block.read_roi]
 #    fib1 = fibrosis1[block.read_roi]
 #    fib2 = fibrosis2[block.read_roi]
+#    fg_er = fg_eroded_s0[block.read_roi]
 #
 #    # combine fibrosis layers
-#    finfib[block.write_roi] = (fib1 + fib2) * ~cap
+#    finfib[block.write_roi] = (fib1 + fib2) #* fg_er * ~cap * ~vessel * ~dt * ~pt * fg_er
 #
 #task = daisy.Task(
 #    "blockwise_test",
 #    total_roi=s0_array.roi,
-#    read_roi=Roi((0,0),(1000,1000)),
-#    write_roi=Roi((0,0),(1000,1000)),
+#    read_roi=Roi((0,0),(1000000,1000000)),
+#    write_roi=Roi((0,0),(1000000,1000000)),
 #    read_write_conflict=False,
 #    num_workers=2,
 #    process_function=process_block
 #)
 #
-#daisy.run_blockwise(tasks=[task], multiprocessing=True)
+
+#daisy.run_blockwise(tasks=[task], multiprocessing=False)
+
 ################################################
 # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
 finfib.data = (
-    fibrosis1.data
+    (fibrosis1.data
     + fibrosis2.data
-    * ~vessel_roimask.data
-    * ~dt_roimask.data
-    * ~pt_roimask.data
-    * ~cap_roimask.data
-    * ~tuft_roimask.data
+    + structural_collagen.data)
+    * (1 - vessel_roimask.data)
+    * (1 - dt_roimask.data)
+    * (1 - pt_roimask.data)
+    * (1 - fincap.data)
+    * (1 - tuft_roimask.data)
+    * (1 - tbm.data)
+    * fg_eroded_s0.data.astype(bool)
 )
 
-dask.array.store(finfib.data, finfib)
+dask.array.store(finfib.data, finfib._source_data)
 
 # create final collagen overlay
+fincollagen.data = (
+    structural_collagen.data
+    * ~dt_roimask.data.astype(bool)
+    * ~pt_roimask.data.astype(bool)
+    * fg_eroded_s0.data.astype(bool)
+)
 
+dask.array.store(fincollagen.data, fincollagen._source_data)
 
 # create final inflammation overlay
 fininflamm.data = (
-    inflammation
-    * ~vessel_roimask.data
-    * ~dt_roimask.data
-    * ~pt_roimask.data
-    * ~cap_roimask.data
-    * ~tuft_roimask.data
+    inflammation.data
+    * ~vessel_roimask.data.astype(bool)
+    * ~dt_roimask.data.astype(bool)
+    * ~pt_roimask.data.astype(bool)
+    * ~fincap.data.astype(bool)
+    * ~tuft_roimask.data.astype(bool)
+    * fg_eroded_s0.data.astype(bool)
 )
-dask.array.store(fininflamm.data, fininflamm)
+dask.array.store(fininflamm.data, fininflamm._source_data)
 
 # calculate ROI fibrosis score & save to txt file
+with open(Path(zarr_path.parent / "fibpx.txt"), "w") as f:
+    f.writelines("# Fibrosis Pixels per Block \n")
+with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
+    f.writelines("# Tissue Pixels per Block \n")
+
+# blockwise mask multiplications
+def fibscore_block(block: daisy.Block):
+    # in data
+    fib = finfib[block.read_roi]
+    fg_er = fg_eroded_s0[block.read_roi]
+    vessel = vessel_roimask[block.read_roi]
+    cap = fincap[block.read_roi]
+    # calc positive pixels in mask
+    fibpx = np.count_nonzero(fib)
+    fgpx = fg_er * ~vessel.astype(bool) * ~cap.astype(bool)
+    fgpx = np.count_nonzero(fgpx)
+
+    #write to text file
+    # create text file
+    with open(Path(zarr_path.parent / "fibpx.txt"), "a") as f:
+        f.writelines(f"{fibpx} \n")
+    with open(Path(zarr_path.parent / "tissuepx.txt"), "a") as f:
+        f.writelines(f"{fgpx} \n")
+
+fibscore_task = daisy.Task(
+    "fibscore calc",
+    total_roi=s0_array.roi,
+    read_roi=Roi((0,0),(1000000,1000000)),
+    write_roi=Roi((0,0),(1000000,1000000)),
+    read_write_conflict=False,
+    num_workers=2,
+    process_function=fibscore_block
+)
+daisy.run_blockwise(tasks=[fibscore_task], multiprocessing=False)
+
+fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
+tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))
+
+total_fibpx = np.sum(fibpx)
+total_tissuepx = np.sum(tissuepx)
+total_fibscore = (total_fibpx / total_tissuepx) * 100
+
+with open(txt_path, "a") as f:
+    f.writelines(f"Final score: {total_fibscore}")
+
 # total_tissue = foregroundmask * ~capsule * ~tuft * ~vessel
 # score = finfib / total_tissue
 # with open(os.path.join(MODEL_DATA_PATH, "test_cases.txt"), "w") as f:
-#  f.writelines("\n".join(score))
+#  f.writelines("\n".join(score))s
