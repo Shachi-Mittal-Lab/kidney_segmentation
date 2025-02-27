@@ -4,7 +4,7 @@ from pathlib import Path
 
 # file inputs
 ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR21-2051-A-1-9-TRI  - 2022-08-10 16.30.12.ndpi") #Eric edit
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/21-2051A.zarr") #Eric edit
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/21-2001_region.zarr") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/input")

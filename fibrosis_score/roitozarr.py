@@ -17,8 +17,8 @@ from dask.diagnostics import ProgressBar
 import openslide
 from matplotlib import pyplot as plt
 
-ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2073-A-1-9-TRI - 2022-08-08 15.03.42.ndpi")
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2073A_region.zarr")
+ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2091-A-1-9-TRICHROME - 2022-11-11 16.49.25.ndpi")
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2091_region.zarr")
 
 def openndpi(ndpi_path, pyramid_level):
     slide = openslide.OpenSlide(str(ndpi_path)) #Eric edit
@@ -32,7 +32,9 @@ x_res, y_res, units = openndpi(ndpi_path, 0)
 
 # read region & convert to RGB from RGBA and np to dask
 slide = openslide.OpenSlide(str(ndpi_path))
-region = slide.read_region(location=(16000,5000),level=0,size=(15000,10000))
+region = slide.read_region(location=(5000,19000),level=0,size=(40000,14000))
+plt.imshow(region)
+plt.show()
 s0_array = np.array(region)[:,:,:3]
 dask_array = dask.array.from_array(s0_array, chunks="auto")
 s0_shape = s0_array.shape

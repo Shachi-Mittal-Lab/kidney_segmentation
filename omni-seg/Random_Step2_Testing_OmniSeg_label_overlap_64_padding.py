@@ -456,8 +456,7 @@ def main(img, output_dir, case_name):
         os.makedirs(output_folder)
 
     parser = get_arguments(img, output_folder)
-    print(parser)
-
+    
     with Engine(custom_parser=parser) as engine:
         args = parser.parse_args()
         if args.num_gpus > 1:
