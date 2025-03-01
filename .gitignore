@@ -3,6 +3,7 @@ clinical_patches/
 final_merge/
 segmentation_merge/
 daisy_logs/
+omni-seg/input
 
 # daisy logs
 .err

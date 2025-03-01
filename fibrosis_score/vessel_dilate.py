@@ -87,7 +87,6 @@ daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
 
 # size of dilation of smallest object
 base_size = 3
-
 # Label connected components
 filtered_array = remove_small_objects(vessel10x._source_data[:].astype(bool), min_size=2000)
 vessel10x._source_data[:] = remove_small_holes(filtered_array, area_threshold=5000)
@@ -106,6 +105,5 @@ for obj_label in tqdm(range(1, labeled_array.max() + 1)):
     struct_elem = disk(dilation_radius, decomposition="sequence")
     # Dilate the object and store in the output array
     vessel10xdilated._source_data[:] |= binary_dilation(obj_mask, struct_elem)
-
 
 vessel10xdilated._source_data[:] = dask.array.clip(vessel10xdilated._source_data[:] - vessel10x._source_data[:], 0, 1)
