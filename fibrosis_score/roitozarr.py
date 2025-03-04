@@ -9,17 +9,19 @@ from pathlib import Path
 from dask.array import coarsen, mean
 from pathlib import Path
 
-
-
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 from dask.diagnostics import ProgressBar
 import openslide
 from matplotlib import pyplot as plt
 
+## inputs ##
 ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2091-A-1-9-TRICHROME - 2022-11-11 16.49.25.ndpi")
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2091_region.zarr")
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2091_region_test.zarr")
 
+#############
+
+# grab resolution from image 
 def openndpi(ndpi_path, pyramid_level):
     slide = openslide.OpenSlide(str(ndpi_path)) #Eric edit
     x_res = float(slide.properties["tiff.XResolution"])
@@ -32,9 +34,16 @@ x_res, y_res, units = openndpi(ndpi_path, 0)
 
 # read region & convert to RGB from RGBA and np to dask
 slide = openslide.OpenSlide(str(ndpi_path))
-region = slide.read_region(location=(5000,19000),level=0,size=(40000,14000))
+
+# DEFINE REGION #
+region = slide.read_region(location=(5000,19000),level=0,size=(4000,1400))
+#################
+
+# Show Region #
 plt.imshow(region)
 plt.show()
+
+
 s0_array = np.array(region)[:,:,:3]
 dask_array = dask.array.from_array(s0_array, chunks="auto")
 s0_shape = s0_array.shape

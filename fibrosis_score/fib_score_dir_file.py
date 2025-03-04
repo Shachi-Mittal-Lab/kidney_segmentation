@@ -377,7 +377,6 @@ for offset in tqdm(offsets_final):
         voxel_roi.begin[1] : voxel_roi.end[1],
     ] = structural_collagen.T
 
-    """
     # send 40x image to omni-seg to predict
     subprocess.run(["python3", omni_seg_path], cwd=subprocesswd, check=True)
 
@@ -390,7 +389,6 @@ for offset in tqdm(offsets_final):
         output_path / "4_1_vessel" / "slice_pred_40X.npy", vessel_mask, voxel_roi
     )
     omniseg_to_zarr(output_path / "5_3_ptc" / "slice_pred_40X.npy", ptc_mask, voxel_roi)
-    """
 
 print("Predicting Gloms with U-Net")
 # Use U-net to predict gloms
