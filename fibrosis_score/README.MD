@@ -28,7 +28,7 @@ This is browser-based and easy to navigate the raw data and masks using tabs.
 We will use the terminal to open Neuroglancer.  To visualize just the raw data, we will type:
 
 ``` 
-neuroglancer - d /your/data/path.zarr/raw*
+neuroglancer -d /your/data/path.zarr/raw*
 ```
 
 The raw* indicates all pyramid levels should be loaded.  Neuroglancer will lazy load these layers automatically.
@@ -36,13 +36,13 @@ The raw* indicates all pyramid levels should be loaded.  Neuroglancer will lazy 
 To load masks in addition to the raw data, you will type: 
 
 ``` 
-neuroglancer - d /your/data/path.zarr/raw* /your/data/path.zarr/mask/maskname1 
+neuroglancer -d /your/data/path.zarr/raw* /your/data/path.zarr/mask/maskname1 
 ```
 
 This will load mask with name maskname1.  You may load multiple masks as follows, ensuring your path is complete and there are spaces between each path:
 
 ``` 
-neuroglancer - d /your/data/path.zarr/raw* /your/data/path.zarr/mask/maskname1 /tour/data/path.zarr/mask/maskname2
+neuroglancer -d /your/data/path.zarr/raw* /your/data/path.zarr/mask/maskname1 /tour/data/path.zarr/mask/maskname2
 ```
 
 This will open Neuroglancer in your browser with multiple tabs visible: your raw, and any other masks you've included in your command above.  If there are tabs missing, there was a mistake in your path.  Return to your terminal, hit enter to exit, and try again.
@@ -60,7 +60,6 @@ void main() {
             toNormalized(getDataValue(2)))
         );
 }
-
 ```
 
 ## Visualizing Masks
