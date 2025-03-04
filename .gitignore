@@ -178,3 +178,6 @@ cython_debug/
 
 # vs code settings 
 .vscode
+
+# Eric for now
+fibrosis_score/roitozarr_Eric_ver.py

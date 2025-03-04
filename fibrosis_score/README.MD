@@ -12,6 +12,8 @@ The "raw" folder contains the raw data - the whole slide image.  There will be f
 
 The "mask" folder contains the relevant masks we've generated throughout the pipeline so that we can visualize them as needed. 
 
+!<img src="./readmeimages/zarr_org.png" alt="isolated" width="800"/>
+
 Both the pyramid level folders and the mask folders will have multiple folders inside of them named by index number.  These are the chunks of these data.  These chunks are what the code uses to process any operation block-wise, so that we do not run out of memory operating on these large data files. To see the metadata around these chunks, you need to show hidden files in your file viewer.  Two files will appear: .zattrs (contains the voxel size, axis names, world units, and offset associated with that data) and .zarray (which contains chunk size, shape, data type, etc.).
 
 # How to Visualize with Neuroglancer 
@@ -20,8 +22,6 @@ To visualize the zarr, we use the Funke Lab's tools with Neuroglancer:
 https://github.com/funkelab/funlib.show.neuroglancer
 
 This is browser-based and easy to navigate the raw data and masks using tabs. 
-
-*insert picture here of WSI in neuroglancer* 
 
 ## Opening Raw Data and Masks
 
@@ -47,7 +47,13 @@ neuroglancer -d /your/data/path.zarr/raw* /your/data/path.zarr/mask/maskname1 /t
 
 This will open Neuroglancer in your browser with multiple tabs visible: your raw, and any other masks you've included in your command above.  If there are tabs missing, there was a mistake in your path.  Return to your terminal, hit enter to exit, and try again.
 
+!<img src="./readmeimages/openviewer.png" alt="isolated" width="800"/>
+
+The viewer will open four displays, for easy viewing of three dimensional data.  Since our data is not three dimensional, we only need the top left display.  Click the box in the upper right hand corner of this display to enlarge this window.
+
 ## Visualizing Color
+
+!<img src="./readmeimages/tabs.png" alt="isolated" width="800"/>
 
 Your raw data will load grayscale by default.  To fix this, right click on your raw tab and an options window will appear on the right.  Navigate to the "render" tab, delete the contents of the shader window, and copy and paste this shader: 
 
@@ -62,11 +68,19 @@ void main() {
 }
 ```
 
+!<img src="./readmeimages/rgb.png" alt="isolated" width="800"/>
+
 ## Visualizing Masks
 
 When the browser opens from your intitial command, all masks are visible by default, but they load as images, and therefore will not be visible.  To fix this, right click on the mask you would like to visualize and an options window will appear on the right.  Navigate to the img button on the top, click, and select "seg" in the dropdown.  This will visualize your mask in blue.
 
+!<img src="./readmeimages/maskformat.png" alt="isolated" width="800"/>
+
 To change the color of the mask, navigate to the "render" tab, and click "fixed color". Select the color you wish to visualize that tab in. 
+
+!<img src="./readmeimages/maskcolor.png" alt="isolated" width="800"/>
+
+To toggle visibility of the masks, left click on the tab with the mask name you would like to hide or make visible again.
 
 # Navigation
 Click and drag the mouse to navigate the image.
