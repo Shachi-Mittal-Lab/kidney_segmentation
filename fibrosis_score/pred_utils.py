@@ -1,16 +1,20 @@
-# Repo Tools
-from directory_paths import (
-    cortmed_weights_path,
-    cortmed_starting_model_path,
-)
-
 # Funke Lab Tools
 from funlib.geometry import Roi
 
 # Tools
 import torch
+import torchvision.transforms as T
 from tqdm import tqdm
+import sys
 
+sys.path.append("/media/mrl/Data/pipeline_connection/kidney_segmentation")
+
+from directory_paths import (
+    cortmed_weights_path,
+    cortmed_starting_model_path,
+)
+
+# cortext stuff Vgg16
 def pred_cortex(inarray, offsets, patch_size, patch_spacing, pred_mask, device):
     
     with torch.no_grad():
@@ -51,3 +55,6 @@ def pred_cortex(inarray, offsets, patch_size, patch_spacing, pred_mask, device):
     # remove vgg16 from gpu memmory
     del vgg16
     return
+
+# Unet stuff
+

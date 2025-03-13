@@ -25,7 +25,7 @@ else:
     device = torch.device("cpu")
 
 #ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2072-A-1-9-TRI - 2022-08-08 14.51.30.ndpi")
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predicted/unet_testing/21-2002_region_model0_dataset0.zarr")
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/22-2073_region.zarr")
 offset = (0, 0)
 axis_names = [
     "x",
@@ -34,6 +34,7 @@ axis_names = [
 ]
 
 s2_array = open_ds(zarr_path / "raw" / "s2")
+s0_array = open_ds(zarr_path / "raw" / "s0")
 
 model = torch.load("model_dataset1_flips.pt", weights_only=False)
 
@@ -49,6 +50,19 @@ caps2 = prepare_ds(
     dtype=np.uint8,
 )
 caps2._source_data[:] = 0
+
+# create mask for final inflammation overlay at 40x
+caps340x = prepare_ds(
+    zarr_path / "mask" / "caps340x",
+    s0_array.shape[0:2],
+    s0_array.offset,
+    s0_array.voxel_size,
+    s0_array.axis_names[0:2],
+    s0_array.units,
+    mode="w",
+    dtype=np.uint8,
+)
+caps340x._source_data[:] = 0
 
 inp_transforms = transforms.Compose(
     [
@@ -87,3 +101,25 @@ cap_id_task = daisy.Task(
     process_function=cap_id_block
 )
 daisy.run_blockwise(tasks=[cap_id_task], multiprocessing=False)
+
+# blockwise upsample to 40x
+# upsample 5x eroded tissue mask to use to filter predictions
+upsampling_factor = (4,4)
+def upsample_block(block: daisy.Block):
+    s2_data = caps2[block.read_roi]
+    s0_data = s2_data
+    for axis, reps in enumerate(upsampling_factor):
+        s0_data = np.repeat(s0_data, reps, axis=axis)
+    caps340x[block.write_roi] = s0_data
+
+block_roi = Roi((0, 0), (1000, 1000)) * s0_array.voxel_size
+upsample_task = daisy.Task(
+    "blockwise_upsample",
+    total_roi=s2_array.roi,
+    read_roi=block_roi,
+    write_roi=block_roi,
+    read_write_conflict=False,
+    num_workers=2,
+    process_function=upsample_block,
+)
+daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)

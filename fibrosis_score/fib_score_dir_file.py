@@ -82,26 +82,21 @@ os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
 
 ###########
 
-# convert ndpi to zarr array levels 40x, 20x, 10x, 5x
+# convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
 # ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names)
 
-# grab new zarr with reasonable chunks as dask array
+# grab 5x, 10x levels & calculate foreground masks
 s3_array = open_ds(zarr_path / "raw" / "s3")
 s2_array = open_ds(zarr_path / "raw" / "s2")
 
-# prep foreground mask locations in zarr
-fmask, filled_fmask, eroded_fmask = prepare_foreground_masks(zarr_path, s3_array)
-
-# generate and save foreground mask
 print("Generating Foreground Masks")
+fmask, filled_fmask, eroded_fmask = prepare_foreground_masks(zarr_path, s3_array)
 mask = foreground_mask(s3_array.data, threshold)
 store_fgbg = zarr.open(zarr_path / "mask" / "foreground")
 dask.array.store(mask, store_fgbg)
 
-# fill holes in foreground mask
+# fill holes & erode foreground mask
 filled_fmask._source_data[:] = fill_holes(mask, filldisk=15, shrinkdisk=10)
-
-# erosion to shave away edge tissue
 eroded_fmask._source_data[:] = erode(filled_fmask._source_data[:], shrinkdisk=40)
 
 # create integral mask of filled foreground mask and save
@@ -109,7 +104,7 @@ imask = prepare_mask(zarr_path, s3_array, "integral_foreground")
 integral_mask = integral_image(filled_fmask._source_data[:])
 imask._source_data[:] = integral_mask
 
-# create patch count mask
+# create patch count mask for Cortex model
 patch_shape = Coordinate(224, 224)
 patch_count_mask, patch_size = generate_patchcount_mask(
     imask, patch_shape, tissueallowance=0.30
@@ -118,7 +113,7 @@ patch_count_mask, patch_size = generate_patchcount_mask(
 patch_spacing = Coordinate(112, 112)
 gridmask = generate_grid_mask(patch_count_mask, patch_spacing)
 
-# create mask of pixels for possible starting pixels gien the ROI size and threshold
+# create patchmask
 patch_mask = prepare_patch_mask(zarr_path, s3_array, patch_count_mask, "patch_mask")
 patch_mask._source_data[:] = patch_count_mask * gridmask
 
@@ -129,18 +124,12 @@ offsets = [
     for a, b in zip(*coords)
 ]
 
-# apply foreground vs background model at 5x (s3)
+# apply VGG16 Cortex model at 5x (s3)
 s3_array = open_ds(zarr_path / "raw" / "s3")
-
-# make dataset for mask
 pred_mask = prepare_mask(zarr_path, s3_array, "cortex")
 pred_mask[:] = 3
-
-# predict with VGG16 to identify cortex
 pred_cortex(s3_array, offsets, patch_size, patch_spacing, pred_mask, device)
-
-print("Preparing Masks for Clustering and Omni-Seg")
-# multiply by tissue max to shave off background
+# shave off background
 pred_mask._source_data[:] = pred_mask._source_data * filled_fmask._source_data[:]
 
 # create integral mask of cortex mask and save
@@ -148,29 +137,28 @@ integral_cortex_mask = integral_image(pred_mask._source_data[:])
 icmask = prepare_mask(zarr_path, s3_array, "integral_cortex")
 icmask._source_data[:] = integral_cortex_mask
 
-# create patch mask: this marks every pixel that can be the starting pixel
-# of a patch of the defined patch size that will encompass mostly tissue
+# create patch mask for Omni-Seg
 patch_shape_final = Coordinate(
     512, 512
-)  # Will convention: shape in voxels started 150 x 150 omni-seg input WAS 512/1024
+)  # Will convention: shape in voxels
 
-patch_count_mask_final = generate_patchcount_mask(
+patch_count_mask_final, patch_size_final = generate_patchcount_mask(
     icmask, patch_shape_final, tissueallowance=0.10
 )
 
-# make grid on s3
+# generate gridmask
 patch_spacing_final = Coordinate(
     256, 256
-)  # was 256x256/512 #TRY CHANGING THIS THIS TIME
+) 
 gridmaskfinal = generate_grid_mask(patch_count_mask_final, patch_spacing_final)
 
-# create mask of pixels for possible starting pixels gien the ROI size and threshold
+# create patch mask
 patch_mask_final = prepare_patch_mask(
     zarr_path, s3_array, patch_count_mask_final, "patch_mask_final"
 )
 patch_mask_final._source_data[:] = gridmaskfinal * patch_count_mask_final
 
-# dask.array.store(patch_count_mask, store_patch_mask)
+# Generate list of coordinates of patches 
 coords = np.nonzero(patch_mask_final._source_data[:])
 offsets_final = [
     patch_mask_final.roi.offset + Coordinate(a, b) * patch_mask_final.voxel_size
@@ -183,22 +171,21 @@ roi_mask = prepare_patch_mask(zarr_path, s3_array, patch_count_mask, "rois")
 # get cluster centers
 clustering, n_clusters = prepare_clustering(gray_cluster_centers)
 
-# create visualization of fibrosis clusters
+# grab 40x level
 s0_array = open_ds(zarr_path / "raw" / "s0")
 
+print("Preparing Masks for Clustering and Omni-Seg")
 # prepare clustering mask locations in zarr (40x)
 fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask = (
     prepare_clustering_masks(zarr_path, s0_array)
 )
-
 # prepare Omni-Seg mask locations in zarr (40x)
 pt_mask, dt_mask, ptc_mask, vessel_mask = prepare_omniseg_masks(zarr_path, s0_array)
 
-# prepare masks
+# prepare postprocessing masks in zarr (40x)
 tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fininflamm_mask = (
     prepare_postprocessing_masks(zarr_path, s0_array)
 )
-
 # prep mask for cap at 10x
 cap_mask10x = prepare_mask(zarr_path, s2_array, "cap10x")
 
@@ -277,8 +264,7 @@ inp_transforms = T.Compose(
 patch_shape_final = Coordinate(512, 512)
 patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
 
-print("Cleaning Glom Class")
-
+print("Predicting Glom Class")
 # blockwise predictions
 def cap_id_block(block: daisy.Block):
     # in data slice
@@ -293,7 +279,6 @@ def cap_id_block(block: daisy.Block):
         preds = preds.squeeze().squeeze().cpu().detach().numpy()
         preds = preds > 0.5
     cap_mask10x[block.write_roi] = preds
-
 
 cap_id_task = daisy.Task(
     "Cap ID",
