@@ -57,4 +57,10 @@ def pred_cortex(inarray, offsets, patch_size, patch_spacing, pred_mask, device):
     return
 
 # Unet stuff
-
+inp_transforms = T.Compose(
+    [
+        T.Grayscale(),
+        T.ToTensor(),
+        T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
+    ]
+)
