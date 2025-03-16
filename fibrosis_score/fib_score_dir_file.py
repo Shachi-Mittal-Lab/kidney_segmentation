@@ -14,7 +14,14 @@ from patch_utils_dask import foreground_mask
 from cluster_utils import prepare_clustering, grayscale_cluster
 from pred_utils import pred_cortex
 from processing_utils import fill_holes, erode
-from daisy_blocks import cap_prediction, cap_upsample
+from daisy_blocks import (
+    cap_prediction,
+    cap_upsample,
+    tissuemask_upsample,
+    id_tbm,
+    id_bc,
+    downsample_vessel
+)
 
 # Funke Lab Tools
 import daisy
@@ -139,18 +146,14 @@ icmask = prepare_mask(zarr_path, s3_array, "integral_cortex")
 icmask._source_data[:] = integral_cortex_mask
 
 # create patch mask for Omni-Seg
-patch_shape_final = Coordinate(
-    512, 512
-)  # Will convention: shape in voxels
+patch_shape_final = Coordinate(512, 512)  # Will convention: shape in voxels
 
 patch_count_mask_final, patch_size_final = generate_patchcount_mask(
     icmask, patch_shape_final, tissueallowance=0.10
 )
 
 # generate gridmask
-patch_spacing_final = Coordinate(
-    256, 256
-) 
+patch_spacing_final = Coordinate(256, 256)
 gridmaskfinal = generate_grid_mask(patch_count_mask_final, patch_spacing_final)
 
 # create patch mask
@@ -159,7 +162,7 @@ patch_mask_final = prepare_patch_mask(
 )
 patch_mask_final._source_data[:] = gridmaskfinal * patch_count_mask_final
 
-# Generate list of coordinates of patches 
+# Generate list of coordinates of patches
 coords = np.nonzero(patch_mask_final._source_data[:])
 offsets_final = [
     patch_mask_final.roi.offset + Coordinate(a, b) * patch_mask_final.voxel_size
@@ -275,7 +278,7 @@ cap_mask10x._source_data[:] = remove_small_objects(
 
 upsampling_factor = cap_mask10x.voxel_size / fincap_mask.voxel_size
 
-# blockwise upsample to 40x
+# blockwise upsample from 10x to 40x
 cap_upsample(cap_mask10x, fincap_mask, upsampling_factor, s2_array, s0_array)
 
 # scale eroded foreground mask to 40x from 5x for final multiplications
@@ -292,95 +295,26 @@ fg_eroded_s0 = prepare_ds(
     dtype=fg_eroded.dtype,
 )
 
-
-# upsample 5x eroded tissue mask to use to filter predictions
-def upsample_block(block: daisy.Block):
-    s3_data = fg_eroded[block.read_roi]
-    s0_data = s3_data
-    for axis, reps in enumerate(upsampling_factor):
-        s0_data = np.repeat(s0_data, reps, axis=axis)
-    fg_eroded_s0[block.write_roi] = s0_data
-
-
-block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
-upsample_task = daisy.Task(
-    "blockwise_upsample",
-    total_roi=s0_array.roi,
-    read_roi=block_roi,
-    write_roi=block_roi,
-    read_write_conflict=False,
-    num_workers=2,
-    process_function=upsample_block,
-)
-daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)
-
-fg_eroded_s0 = open_ds(zarr_path / "mask" / "foreground_eroded_s0")  # in s0
+# upsample tissue mask from 5x to 40x
+tissuemask_upsample(fg_eroded, fg_eroded_s0, s0_array, upsampling_factor)
 
 print("Identifying TBM")
 # need to erode and dilate to generate a TBM class
-erode_kernel = disk(2, decomposition="sequence")
-dilate_kernel = disk(
-    15, decomposition="sequence"
-)  # sequence for computational efficiency
+id_tbm(dt_mask, pt_mask, structuralcollagen_mask, tbm_mask, s0_array, fg_eroded_s0)
 
-
-def tbm_block(block: daisy.Block):
-    pt_data = dt_mask[block.read_roi]
-    dt_data = pt_mask[block.read_roi]
-    cluster = structuralcollagen_mask[block.read_roi]
-    tubules = pt_data + dt_data
-    eroded_tubules = binary_erosion(tubules, erode_kernel)
-    tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
-    tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster
-    tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
-    tbm_mask[block.write_roi] = tbm
-
-
-block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
-tbm_task = daisy.Task(
-    "ID TBM",
-    total_roi=s0_array.roi,
-    read_roi=block_roi,
-    write_roi=block_roi,
-    read_write_conflict=False,
-    num_workers=2,
-    process_function=tbm_block,
-)
-daisy.run_blockwise(tasks=[tbm_task], multiprocessing=False)
-
-tbm = open_ds(zarr_path / "mask" / "tbm")
 
 print("Identifying Bowman's Capsules")
-erode_kernel = disk(14, decomposition="sequence")
-dilate_kernel = disk(
-    9, decomposition="sequence"
-)  # sequence for computational efficiency
-
-
-def bc_block(block: daisy.Block):
-    cap = fincap_mask[block.read_roi]
-    cluster0 = structuralcollagen_mask[block.read_roi]
-    cluster1 = fibrosis1_mask[block.read_roi]
-    cluster2 = fibrosis2_mask[block.read_roi]
-    cluster = cluster0 + cluster1 + cluster2
-    eroded_cap = binary_erosion(cap, erode_kernel)
-    dilated_cap = binary_dilation(cap, dilate_kernel)
-    bc = (dilated_cap * (1 - eroded_cap)) * cluster
-    bc = gaussian(bc.astype(float), sigma=2.0) > 0.5
-    bc_mask[block.write_roi] = bc
-
-
-block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
-bc_task = daisy.Task(
-    "ID Bowman's Capsule",
-    total_roi=s0_array.roi,
-    read_roi=block_roi,
-    write_roi=block_roi,
-    read_write_conflict=False,
-    num_workers=2,
-    process_function=bc_block,
+# need to erode and dilate to generate Bowman's Capsule class
+id_bc(
+    fincap_mask,
+    structuralcollagen_mask,
+    fibrosis1_mask,
+    fibrosis2_mask,
+    bc_mask,
+    fg_eroded_s0,
+    s0_array,
 )
-daisy.run_blockwise(tasks=[bc_task], multiprocessing=False)
+
 
 print("Identifying Structural Collagen around Vessels")
 # create masks for vessel
@@ -389,35 +323,7 @@ vessel10xdilated = prepare_mask(zarr_path, s2_array, "vessel10xdilated")
 vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
 
 # downsample 40x vessel predictions to 10x for dilation
-downsample_factor = 4
-
-
-def downsample_block(block: daisy.Block):
-    s0_data = vessel_mask[block.read_roi]
-    new_shape = (
-        s0_data.shape[0] // downsample_factor,
-        downsample_factor,
-        s0_data.shape[1] // downsample_factor,
-        downsample_factor,
-    )
-    downsampled = s0_data.reshape(new_shape).mean(
-        axis=(1, 3)
-    )  # Average over grouped blocks
-    vessel10x[block.write_roi] = downsampled
-
-
-block_roi = Roi((0, 0), (1000, 1000)) * vessel_mask.voxel_size
-
-downsample_task = daisy.Task(
-    "blockwise_downsample",
-    total_roi=vessel_mask.roi,
-    read_roi=block_roi,
-    write_roi=block_roi,
-    read_write_conflict=False,
-    num_workers=2,
-    process_function=downsample_block,
-)
-daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
+downsample_vessel(vessel_mask, vessel10x)
 
 # size of dilation of smallest object
 base_size = 3
@@ -455,7 +361,7 @@ finfib_mask.data = (
     * (1 - dt_mask.data)
     * (1 - pt_mask.data)
     * (1 - fincap_mask.data)
-    * (1 - tbm.data)
+    * (1 - tbm_mask.data)
     * fg_eroded_s0.data
 )
 
@@ -463,7 +369,7 @@ dask.array.store(finfib_mask.data, finfib_mask._source_data)
 
 # create final collagen overlay
 fincollagen_mask.data = (
-    (structuralcollagen_mask.data + vessel40xdilated.data + tbm.data + bc_mask.data)
+    (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
     * (1 - dt_mask.data)
     * (1 - pt_mask.data)
     * (1 - fincap_mask.data)
