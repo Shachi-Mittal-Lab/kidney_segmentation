@@ -13,14 +13,15 @@ from mask_utils import (
 from patch_utils_dask import foreground_mask
 from cluster_utils import prepare_clustering, grayscale_cluster
 from pred_utils import pred_cortex
-from processing_utils import fill_holes, erode
+from processing_utils import fill_holes, erode, varied_vessel_dilation
 from daisy_blocks import (
     cap_prediction,
     cap_upsample,
     tissuemask_upsample,
     id_tbm,
     id_bc,
-    downsample_vessel
+    downsample_vessel,
+    calculate_fibscore
 )
 
 # Funke Lab Tools
@@ -326,31 +327,7 @@ vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
 downsample_vessel(vessel_mask, vessel10x)
 
 # size of dilation of smallest object
-base_size = 3
-# Label connected components
-filtered_array = remove_small_objects(
-    vessel10x._source_data[:].astype(bool), min_size=2000
-)
-vessel10x._source_data[:] = remove_small_holes(filtered_array, area_threshold=5000)
-
-labeled_array, num_features = label(vessel10x._source_data[:])
-
-# Process each object separately
-for obj_label in tqdm(range(1, labeled_array.max() + 1)):
-    # Isolate object
-    obj_mask = labeled_array == obj_label
-    # Compute object size
-    object_size = np.sum(obj_mask)
-    # Define dilation size (larger for bigger objects)
-    dilation_radius = base_size + int(np.log1p(object_size))  # Log-based scaling
-    # Create structuring element (disk for circular dilation)
-    struct_elem = disk(dilation_radius, decomposition="sequence")
-    # Dilate the object and store in the output array
-    vessel10xdilated._source_data[:] |= binary_dilation(obj_mask, struct_elem)
-
-vessel10xdilated._source_data[:] = dask.array.clip(
-    vessel10xdilated._source_data[:] - vessel10x._source_data[:], 0, 1
-)
+varied_vessel_dilation(3, vessel10x, vessel10xdilated)
 
 ################################################
 # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
@@ -398,35 +375,7 @@ with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
 
 
 # blockwise mask multiplications
-def fibscore_block(block: daisy.Block):
-    # in data
-    fib = finfib_mask[block.read_roi]
-    fg_er = fg_eroded_s0[block.read_roi]
-    vessel = vessel_mask[block.read_roi]
-    cap = fincap_mask[block.read_roi]
-    # calc positive pixels in mask
-    fibpx = np.count_nonzero(fib)
-    fgpx = fg_er * ~vessel.astype(bool) * ~cap.astype(bool)
-    fgpx = np.count_nonzero(fgpx)
-
-    # write to text file
-    # create text file
-    with open(Path(zarr_path.parent / "fibpx.txt"), "a") as f:
-        f.writelines(f"{fibpx} \n")
-    with open(Path(zarr_path.parent / "tissuepx.txt"), "a") as f:
-        f.writelines(f"{fgpx} \n")
-
-
-fibscore_task = daisy.Task(
-    "fibscore calc",
-    total_roi=s0_array.roi,
-    read_roi=Roi((0, 0), (1000000, 1000000)),
-    write_roi=Roi((0, 0), (1000000, 1000000)),
-    read_write_conflict=False,
-    num_workers=2,
-    process_function=fibscore_block,
-)
-daisy.run_blockwise(tasks=[fibscore_task], multiprocessing=False)
+calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, s0_array)
 
 fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
 tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))

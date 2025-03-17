@@ -18,7 +18,7 @@ from skimage.morphology import (
     disk,
 )
 from skimage.filters import gaussian
-
+from pathlib import Path
 
 def cap_prediction(
     cap_mask10x: Array,
@@ -220,3 +220,42 @@ def downsample_vessel(
         process_function=downsample_block,
     )
     daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
+
+def calculate_fibscore(
+        finfib_mask: Array,
+        fg_eroded_s0: Array,
+        vessel_mask: Array,
+        fincap_mask: Array,
+        zarr_path: Path,
+        s0_array: Array,
+):
+# blockwise mask multiplications
+    def fibscore_block(block: daisy.Block):
+        # in data
+        fib = finfib_mask[block.read_roi]
+        fg_er = fg_eroded_s0[block.read_roi]
+        vessel = vessel_mask[block.read_roi]
+        cap = fincap_mask[block.read_roi]
+        # calc positive pixels in mask
+        fibpx = np.count_nonzero(fib)
+        fgpx = fg_er * (1 - vessel) * (1 - cap)
+        fgpx = np.count_nonzero(fgpx)
+
+        # write to text file
+        # create text file
+        with open(Path(zarr_path.parent / "fibpx.txt"), "a") as f:
+            f.writelines(f"{fibpx} \n")
+        with open(Path(zarr_path.parent / "tissuepx.txt"), "a") as f:
+            f.writelines(f"{fgpx} \n")
+
+
+    fibscore_task = daisy.Task(
+        "fibscore calc",
+        total_roi=s0_array.roi,
+        read_roi=Roi((0, 0), (1000000, 1000000)),
+        write_roi=Roi((0, 0), (1000000, 1000000)),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=fibscore_block,
+    )
+    daisy.run_blockwise(tasks=[fibscore_task], multiprocessing=False)
