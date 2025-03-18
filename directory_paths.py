@@ -3,12 +3,10 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR21-2051-A-1-9-TRI  - 2022-08-10 16.30.12.ndpi") #Eric edit
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2085B_region.zarr") #Eric edit
+input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR21-2051-A-1-9-TRI  - 2022-08-10 16.30.12.ndpi") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/input")
-txt_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/fibscores_22-2085B_region.txt")
 
 # background threshold
 threshold = 50
@@ -48,13 +46,8 @@ omni_seg_path = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-se
 subprocesswd='/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg'
 
 
-
 ##________________________________________________________________________________##
 #for the auto_omni_seg process
-subdirclean1 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/segmentation_merge'
-subdirclean2 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/clinical_patches'
-subdirclean3 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/final_merge'
-
 subprocess_step1 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/1024_Step1_GridPatch_overlap_padding.py'
 subprocess_step1_5 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg//1024_Step1.5_MOTSDataset_2D_Patch_normal_save_csv.py'
 subprocess_step2 = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/Random_Step2_Testing_OmniSeg_label_overlap_64_padding.py'
