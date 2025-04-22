@@ -1,3 +1,6 @@
+# apex install
+omni-seg/apex/
+
 # outputs
 clinical_patches/
 final_merge/
@@ -186,3 +189,4 @@ fibrosis_score/pred_unet_Eric_ver.py
 fibrosis_score/roitozarr_Eric_ver_svs.ipynb
 fibrosis_score/roitozarr_Eric_ver.ipynb
 fibrosis_score/results_visualization_Eric.ipynb
+directory_paths.py

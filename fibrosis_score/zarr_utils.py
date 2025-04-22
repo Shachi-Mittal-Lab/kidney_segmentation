@@ -1,10 +1,13 @@
-from patch_utils_dask import openndpi
+# Repo Tools
+from fibrosis_score.patch_utils_dask import openndpi
+
+# Funke Tools
 from funlib.geometry import Coordinate
 from funlib.persistence import open_ds, prepare_ds
 
+# Tools
 import numpy as np
 import zarr
-
 import dask
 from dask.array import coarsen, mean
 from dask.diagnostics import ProgressBar

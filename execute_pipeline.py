@@ -1,11 +1,9 @@
 # Repo Tools
-from main_pipeline import run_full_pipeline
+from fibrosis_score.main_pipeline import run_full_pipeline
+from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 
 # Tools
 from pathlib import Path
-import sys
-
-sys.path.append("/media/mrl/Data/pipeline_connection/kidney_segmentation")
 
 # import inputs from inputs file
 from directory_paths import (
@@ -20,14 +18,13 @@ from directory_paths import (
     subprocesswd,
 )
 
-input_folder = Path("/home/riware/Desktop/loose_files/ndpis")
+input_files = [x for x in input_path.glob("*")]
+print(f"input files: {input_files}")
 
-input_files = [x for x in input_folder.glob("**/*") if x.is_file()]
-
-for file in input_files:
-    print(f"Running pipeline on {file.stem}")
+for file_path in input_files:
+    print(f"Running pipeline on {file_path.stem}")
     run_full_pipeline(
-        input_path,
+        file_path,
         png_path,
         threshold,
         offset,

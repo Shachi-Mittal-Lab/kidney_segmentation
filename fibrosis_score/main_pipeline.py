@@ -1,6 +1,6 @@
 # Repo Tools
-from zarr_utils import ndpi_to_zarr, omniseg_to_zarr
-from mask_utils import (
+from fibrosis_score.zarr_utils import ndpi_to_zarr, omniseg_to_zarr
+from fibrosis_score.mask_utils import (
     prepare_mask,
     prepare_foreground_masks,
     prepare_clustering_masks,
@@ -10,11 +10,11 @@ from mask_utils import (
     generate_patchcount_mask,
     generate_grid_mask,
 )
-from patch_utils_dask import foreground_mask
-from cluster_utils import prepare_clustering, grayscale_cluster
-from pred_utils import pred_cortex
-from processing_utils import fill_holes, erode, varied_vessel_dilation
-from daisy_blocks import (
+from fibrosis_score.patch_utils_dask import foreground_mask
+from fibrosis_score.cluster_utils import prepare_clustering, grayscale_cluster
+from fibrosis_score.pred_utils import pred_cortex
+from fibrosis_score.processing_utils import fill_holes, erode, varied_vessel_dilation
+from fibrosis_score.daisy_blocks import (
     cap_prediction,
     cap_upsample,
     tissuemask_upsample,
@@ -28,7 +28,6 @@ from daisy_blocks import (
 import daisy
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
-from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 
 # Tools
 import os
@@ -62,8 +61,6 @@ from scipy.ndimage import label
 import torch
 import torchvision.transforms as T
 
-sys.path.append("/media/mrl/Data/pipeline_connection/kidney_segmentation")
-
 def run_full_pipeline(
         input_path: Path,
         png_path: Path,
@@ -84,22 +81,23 @@ def run_full_pipeline(
     print(f"Using {device}")
 
     # Eric edit:no pngs before it was created
-    os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
+    #os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
 
     ###########
     input_filename = input_path.stem
     input_file_ext = input_path.suffix
+    print(input_filename)
 
     # convert file to zarr if not a zarr
     if input_file_ext == ".ndpi":
-        # name zarr
+        # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
         # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
         ndpi_to_zarr(input_path, zarr_path, offset, axis_names)
     elif input_file_ext == ".zarr":
         zarr_path = input_path
     else:
-        print(f"File must be of format .ndpi or .zarr.  Skipping {input_filename}")
+        print(f"File must be of format .ndpi or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
     
     # grab 5x, 10x levels & calculate foreground masks
@@ -207,7 +205,7 @@ def run_full_pipeline(
     with open(txt_path, "w") as f:
         f.writelines("ROI fibrosis scores \n")
 
-    print("Clustering and Omn-Seg Predictions")
+    print("Clustering and Omni-Seg Predictions")
     for offset in tqdm(offsets_final):
         # world units roi selection
         roi = Roi(offset, patch_size_final)  # in nm
@@ -264,7 +262,7 @@ def run_full_pipeline(
     print("Predicting Gloms with U-Net")
     # Use U-net to predict gloms
     # load model
-    model = torch.load("model_dataset1_flips.pt", weights_only=False)
+    model = torch.load("model_dataset1_flips_eric.pt", weights_only=False)
     # preprocessing
     inp_transforms = T.Compose(
         [

@@ -7,8 +7,6 @@ import torchvision.transforms as T
 from tqdm import tqdm
 import sys
 
-sys.path.append("/media/mrl/Data/pipeline_connection/kidney_segmentation")
-
 from directory_paths import (
     cortmed_weights_path,
     cortmed_starting_model_path,

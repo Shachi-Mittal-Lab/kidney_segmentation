@@ -1,7 +1,10 @@
-# Repo Tools
-from pred_utils import inp_transforms
-from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
+# Tools 
+import sys
+sys.path.insert(0, '/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation')
 
+# Repo Tools
+from fibrosis_score.pred_utils import inp_transforms
+from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 
 # Funke Lab Tools
 import daisy

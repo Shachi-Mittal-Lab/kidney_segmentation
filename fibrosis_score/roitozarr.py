@@ -16,8 +16,8 @@ import openslide
 from matplotlib import pyplot as plt
 
 ## inputs ##
-ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2091-A-1-9-TRICHROME - 2022-11-11 16.49.25.ndpi")
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/22-2091_region_test.zarr")
+ndpi_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs/BR21-2075-B-A-1-7-TRI- 2022-11-09 17.44.42.ndpi")
+zarr_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs/22-2075B_region.zarr")
 
 #############
 
@@ -34,15 +34,25 @@ x_res, y_res, units = openndpi(ndpi_path, 0)
 
 # read region & convert to RGB from RGBA and np to dask
 slide = openslide.OpenSlide(str(ndpi_path))
+max_width, max_height = slide.dimensions
+print(f"width: {max_width}, height: {max_height}")
+
+# preview slide 
+preview_level = 4
+max_prev_width, max_prev_height = slide.level_dimensions[preview_level]
+preview_region = slide.read_region(location=(0,0), level=preview_level, size=(max_prev_width, max_prev_height))
+
+plt.imshow(preview_region)
+plt.show()
 
 # DEFINE REGION #
-region = slide.read_region(location=(5000,19000),level=0,size=(4000,1400))
+region = slide.read_region(location=(1000, 15000),level=0,size=(40000, 16000))
 #################
 
 # Show Region #
 plt.imshow(region)
 plt.show()
-
+quit()
 
 s0_array = np.array(region)[:,:,:3]
 dask_array = dask.array.from_array(s0_array, chunks="auto")

@@ -1,6 +1,12 @@
+# Repo Tools
+from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
+
+# Funke Lab Tools
 from funlib.persistence import open_ds, prepare_ds
 from funlib.geometry import Roi, Coordinate
 import daisy
+
+# Tools
 import dask
 from dask.diagnostics import ProgressBar
 from dask.array import coarsen, mean
@@ -14,7 +20,6 @@ import zarr
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
-from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 from PIL import Image
 
 from pathlib import Path

@@ -1,0 +1,20 @@
+numpy==1.26.4
+matplotlib
+imagecodecs
+openslide-python
+openslide-bin
+dask
+funlib.geometry @ git+https://github.com/funkelab/funlib.geometry.git
+funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git
+funlib.show.neuroglancer @ git+https://github.com/funkelab/funlib.show.neuroglancer.git
+daisy
+tifffile
+scikit-image
+scikit-learn
+torch==2.2.2
+torchvision==0.17.2
+scipy
+tqdm
+opencv-python
+pandas
+imgaug
