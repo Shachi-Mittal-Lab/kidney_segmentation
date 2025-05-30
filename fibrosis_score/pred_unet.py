@@ -30,7 +30,7 @@ else:
     device = torch.device("cpu")
 
 #ndpi_path = Path("/media/mrl/Data/pipeline_connection/ndpis/predict/BR22-2072-A-1-9-TRI - 2022-08-08 14.51.30.ndpi")
-zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/22-2073_region.zarr")
+zarr_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs/21-2023A_region.zarr")
 offset = (0, 0)
 axis_names = [
     "x",
@@ -41,7 +41,7 @@ axis_names = [
 s2_array = open_ds(zarr_path / "raw" / "s2")
 s0_array = open_ds(zarr_path / "raw" / "s0")
 
-model = torch.load("model_dataset1_flips.pt", weights_only=False)
+model = torch.load("model_dataset1_flips_eric.pt", weights_only=False)
 
 # create mask for final inflammation overlay at 40x
 caps2 = prepare_ds(

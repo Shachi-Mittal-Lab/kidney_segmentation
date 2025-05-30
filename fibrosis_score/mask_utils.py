@@ -73,6 +73,17 @@ def prepare_clustering_masks(zarr_path, ref_array):
 
     return fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask
 
+def prepare_seg_masks(zarr_path, ref_array, magnification):
+    """
+    This function prepares segmentation masks in 10x
+    for the outputs of binary u-nets.
+    The mask is filled with zeros to begin.
+    """
+    pt_mask = prepare_mask(zarr_path, ref_array, f"pt_{magnification}")
+    dt_mask = prepare_mask(zarr_path, ref_array, f"dt_{magnification}")
+    vessel_mask = prepare_mask(zarr_path, ref_array, f"vessel_{magnification}")
+    cap_mask = prepare_mask(zarr_path, ref_array, f"cap_{magnification}")
+    return pt_mask, dt_mask, vessel_mask, cap_mask
 
 def prepare_omniseg_masks(zarr_path, ref_array):
     """

@@ -1,8 +1,0 @@
-tifffile
-scikit-image
-scikit-learn
-torch
-torchvision
-scipy
-tqdm
-opencv-python

@@ -4,7 +4,7 @@ from fibrosis_score.mask_utils import (
     prepare_mask,
     prepare_foreground_masks,
     prepare_clustering_masks,
-    prepare_seg_masks,
+    prepare_omniseg_masks,
     prepare_postprocessing_masks,
     prepare_patch_mask,
     generate_patchcount_mask,
@@ -185,15 +185,13 @@ def run_full_pipeline(
     # grab 40x level
     s0_array = open_ds(zarr_path / "raw" / "s0")
 
-    print("Preparing Masks for Clustering")
+    print("Preparing Masks for Clustering and Omni-Seg")
     # prepare clustering mask locations in zarr (40x)
     fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask = (
         prepare_clustering_masks(zarr_path, s0_array)
     )
-    # prepare histological segmentation mask locations in zarr (10x)
-    pt_mask_10x, dt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
-    # prepare histological segmentation mask locations in zarr (40x)
-    pt_mask, dt_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
+    # prepare Omni-Seg mask locations in zarr (40x)
+    pt_mask, dt_mask, ptc_mask, vessel_mask = prepare_omniseg_masks(zarr_path, s0_array)
 
     # prepare postprocessing masks in zarr (40x)
     tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fininflamm_mask = (
@@ -207,7 +205,7 @@ def run_full_pipeline(
     with open(txt_path, "w") as f:
         f.writelines("ROI fibrosis scores \n")
 
-    print("Clustering")
+    print("Clustering and Omni-Seg Predictions")
     for offset in tqdm(offsets_final):
         # world units roi selection
         roi = Roi(offset, patch_size_final)  # in nm
@@ -248,7 +246,24 @@ def run_full_pipeline(
             structuralcollagen_mask,
         )
 
-    # begin u-net preds: define preprocessing & patch size
+        # send 40x image to omni-seg to predict
+        subprocess.run(["python3", omni_seg_path], cwd=subprocesswd, check=True)
+
+        output_path = Path(output_directory) / "final_merge" / patchname.stem
+
+        # grab omni-seg outputs and write to zarr
+        omniseg_to_zarr(output_path / "0_1_dt" / "slice_pred_40X.npy", dt_mask, voxel_roi)
+        omniseg_to_zarr(output_path / "1_1_pt" / "slice_pred_40X.npy", pt_mask, voxel_roi)
+        omniseg_to_zarr(
+            output_path / "4_1_vessel" / "slice_pred_40X.npy", vessel_mask, voxel_roi
+        )
+        omniseg_to_zarr(output_path / "5_3_ptc" / "slice_pred_40X.npy", ptc_mask, voxel_roi)
+
+    print("Predicting Gloms with U-Net")
+    # Use U-net to predict gloms
+    # load model
+    model = torch.load("model_dataset1_flips_eric.pt", weights_only=False)
+    # preprocessing
     inp_transforms = T.Compose(
         [
             T.Grayscale(),
@@ -256,66 +271,23 @@ def run_full_pipeline(
             T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
         ]
     )
+
+    # define roi size
     patch_shape_final = Coordinate(512, 512)
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
 
-    print("Predicting Gloms with U-Net")
-    #### Use U-net to predict gloms ####
-
-    # load glom model
-    model = torch.load("model_dataset1_flips_eric.pt", weights_only=False)
-    # predict
-    model_prediction(cap_mask_10x, s2_array, patch_size_final, model, device, "Cap ID")
+    print("Predicting Glom Class")
+    model_prediction(cap_mask10x, s2_array, patch_size_final, model, device, "Cap ID")
 
     # remove small objects from cap mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
+    cap_mask10x._source_data[:] = remove_small_objects(
+        cap_mask10x._source_data[:].astype(bool), min_size=2000
     )
 
-    print("Predicting proximal tubules with U-Net")
-    #### Use U-net to predict pt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_unet_dataset3_pt0_400.pt", weights_only=False)
-    # predict
-    model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
-
-    print("Predicting distal tubules with U-Net")
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_dataset4_dt0_400.pt", weights_only=False)
-    # predict
-    model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
-
-    # assign pixels that were postive in both the pt and dt masks to pt for simplicity 
-    dt_mask_10x.data = dask.array.where((pt_mask_10x.data == 1) & (dt_mask_10x.data == 1), 0, dt_mask_10x.data)
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_dataset1_vessel0_400.pt", weights_only=False)
-    # predict
-    model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
-    # remove small objects from vessel mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
-    )
-
-    upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
+    upsampling_factor = cap_mask10x.voxel_size / fincap_mask.voxel_size
 
     # blockwise upsample from 10x to 40x
-    upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
-    upsample(pt_mask_10x, pt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(dt_mask_10x, dt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
+    upsample(cap_mask10x, fincap_mask, upsampling_factor, s2_array, s0_array)
 
     # scale eroded foreground mask to 40x from 5x for final multiplications
     fg_eroded = open_ds(zarr_path / "mask" / "foreground_eroded")  # in s3
@@ -338,6 +310,7 @@ def run_full_pipeline(
     # need to erode and dilate to generate a TBM class
     id_tbm(dt_mask, pt_mask, structuralcollagen_mask, tbm_mask, s0_array, fg_eroded_s0)
 
+
     print("Identifying Bowman's Capsules")
     # need to erode and dilate to generate Bowman's Capsule class
     id_bc(
@@ -350,13 +323,18 @@ def run_full_pipeline(
         s0_array,
     )
 
+
     print("Identifying Structural Collagen around Vessels")
     # create masks for vessel
+    vessel10x = prepare_mask(zarr_path, s2_array, "vessel10x")
     vessel10xdilated = prepare_mask(zarr_path, s2_array, "vessel10xdilated")
     vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
 
+    # downsample 40x vessel predictions to 10x for dilation
+    downsample_vessel(vessel_mask, vessel10x)
+
     # size of dilation of smallest object
-    varied_vessel_dilation(3, vessel_mask_10x, vessel10xdilated)
+    varied_vessel_dilation(3, vessel10x, vessel10xdilated)
 
     ################################################
     # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
@@ -388,11 +366,11 @@ def run_full_pipeline(
     # create final inflammation overlay
     fininflamm_mask.data = (
         inflammation_mask.data
-        * (1 - vessel_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
-        * (1 - fincap_mask.data)
-        * (1 - vessel_mask.data)
+        * ~vessel_mask.data.astype(bool)
+        * ~dt_mask.data.astype(bool)
+        * ~pt_mask.data.astype(bool)
+        * ~fincap_mask.data.astype(bool)
+        * fg_eroded_s0.data.astype(bool)
     )
     dask.array.store(fininflamm_mask.data, fininflamm_mask._source_data)
 

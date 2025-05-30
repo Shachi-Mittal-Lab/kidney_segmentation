@@ -1,6 +1,7 @@
 # Tools
 import numpy as np
 import cv2
+from PIL import Image
 from sklearn.cluster import KMeans
 from skimage.morphology import remove_small_objects
 
@@ -43,11 +44,12 @@ def grayscale_cluster(
     
     patch_raw = np.transpose(patch_raw, axes=(1, 0, 2))
     patch_raw = patch_raw[:, :, ::-1]  # flip to rgb
-    cv2.imwrite(str(patchpath), patch_raw)
+    #roi_rgb = Image.fromarray(patch_raw, 'RGB')
+    #cv2.imwrite(str(patchpath), patch_raw)
     # convert to grayscale & format for k means
-    roi_gbr = cv2.imread(str(patchpath))
-    roi_rgb = cv2.cvtColor(roi_gbr, cv2.COLOR_BGR2RGB)
-    roi_gray = cv2.cvtColor(roi_rgb, cv2.COLOR_BGR2GRAY)
+    # roi_gbr = cv2.imread(str(patchpath))
+    #roi_rgb = cv2.cvtColor(roi_gbr, cv2.COLOR_BGR2RGB)
+    roi_gray = cv2.cvtColor(patch_raw, cv2.COLOR_RGB2GRAY)
     roi_gray = sigmoid_norm(roi_gray)
     roi_gray_flat = roi_gray.flatten()
     # k means predict

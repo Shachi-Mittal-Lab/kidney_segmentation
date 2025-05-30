@@ -23,12 +23,13 @@ from skimage.morphology import (
 from skimage.filters import gaussian
 from pathlib import Path
 
-def cap_prediction(
-    cap_mask10x: Array,
+def model_prediction(
+    mask: Array,
     s2_array: Array,
     patch_size_final: Array,
     model: torch.nn.Module,
     device: torch.device,
+    task: str,
 ):
 
     def process_block(block: daisy.Block):
@@ -43,10 +44,10 @@ def cap_prediction(
             preds = model(input)
             preds = preds.squeeze().squeeze().cpu().detach().numpy()
             preds = preds > 0.5
-        cap_mask10x[block.write_roi] = preds
+        mask[block.write_roi] = preds
 
-    cap_id_task = daisy.Task(
-        "Cap ID",
+    pred_task = daisy.Task(
+        task,
         total_roi=s2_array.roi,
         read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
         write_roi=Roi((0, 0), patch_size_final),
@@ -54,37 +55,37 @@ def cap_prediction(
         num_workers=2,
         process_function=process_block,
     )
-    daisy.run_blockwise(tasks=[cap_id_task], multiprocessing=False)
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
     return
 
 
-def cap_upsample(
-    cap_mask10x: Array,
-    fincap_mask: Array,
+def upsample(
+    mask_10x: Array,
+    mask_40x: Array,
     upsampling_factor: Coordinate,
     s2_array: Array,
     s0_array: Array,
 ):
 
-    def cap_upsample_block(block: daisy.Block):
-        s2_data = cap_mask10x[block.read_roi]
+    def upsample_block(block: daisy.Block):
+        s2_data = mask_10x[block.read_roi]
         s0_data = s2_data
         for axis, reps in enumerate(upsampling_factor):
             s0_data = np.repeat(s0_data, reps, axis=axis)
-        fincap_mask[block.write_roi] = s0_data
+        mask_40x[block.write_roi] = s0_data
 
     block_roi = Roi((0, 0), (1000, 1000)) * s0_array.voxel_size
 
-    cap_upsample_task = daisy.Task(
+    upsample_task = daisy.Task(
         "blockwise_upsample",
         total_roi=s2_array.roi,
         read_roi=block_roi,
         write_roi=block_roi,
         read_write_conflict=False,
         num_workers=2,
-        process_function=cap_upsample_block,
+        process_function=upsample_block,
     )
-    daisy.run_blockwise(tasks=[cap_upsample_task], multiprocessing=False)
+    daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)
     return
 
 
