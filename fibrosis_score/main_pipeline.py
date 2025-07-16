@@ -16,6 +16,7 @@ from fibrosis_score.pred_utils import pred_cortex
 from fibrosis_score.processing_utils import fill_holes, erode, varied_vessel_dilation
 from fibrosis_score.daisy_blocks import (
     model_prediction,
+    model_prediction_rgb,
     upsample,
     tissuemask_upsample,
     id_tbm,
@@ -263,7 +264,9 @@ def run_full_pipeline(
     #### Use U-net to predict gloms ####
 
     # load glom model
-    model = torch.load("model_dataset1_flips_eric.pt", weights_only=False)
+    # model = torch.load("model_dataset1_flips_eric.pt", weights_only=False) before
+    model = torch.load("model_unet_dataset2_glom0_200.pt", weights_only=False)
+
     # predict
     model_prediction(cap_mask_10x, s2_array, patch_size_final, model, device, "Cap ID")
 
@@ -278,7 +281,7 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_unet_dataset3_pt0_400.pt", weights_only=False)
+    model = torch.load("model_unet_dataset6_pt2_200.pt", weights_only=False)
     # predict
     model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
 
@@ -289,7 +292,7 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_dataset4_dt0_400.pt", weights_only=False)
+    model = torch.load("model_unet_dataset6_dt3_200.pt", weights_only=False)
     # predict
     model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
 
