@@ -62,3 +62,9 @@ inp_transforms = T.Compose(
         T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
     ]
 )
+
+inp_transforms_rgb = T.Compose(
+    [
+        T.ToTensor(),
+    ]
+)

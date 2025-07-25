@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, '/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation')
 
 # Repo Tools
-from fibrosis_score.pred_utils import inp_transforms
+from fibrosis_score.pred_utils import inp_transforms, inp_transforms_rgb
 from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 
 # Funke Lab Tools
@@ -58,6 +58,42 @@ def model_prediction(
     daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
     return
 
+def model_prediction_rgb(
+    mask: Array,
+    s2_array: Array,
+    patch_size_final: Array,
+    model: torch.nn.Module,
+    device: torch.device,
+    task: str,
+):
+
+    def process_block(block: daisy.Block):
+        # in data slice
+        inslices = s2_array._Array__slices(block.read_roi)
+        # it was [:, 0:512, 0:512]
+        # we want [0:512, 0:512, :]
+        inslices = (inslices[1], inslices[2], inslices[0])
+        img = Image.fromarray(s2_array[inslices])
+        print(f"Input image shape for pt preds: {s2_array[inslices].shape}")
+        input = inp_transforms_rgb(img).unsqueeze(0).to(device)
+        print(f"Final input dimenstions {input.shape}")
+        with torch.no_grad():
+            preds = model(input)
+            preds = preds.squeeze().squeeze().cpu().detach().numpy()
+            preds = preds > 0.5
+        mask[block.write_roi] = preds
+
+    pred_task = daisy.Task(
+        task,
+        total_roi=s2_array.roi,
+        read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
+        write_roi=Roi((0, 0), patch_size_final),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=process_block,
+    )
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    return
 
 def upsample(
     mask_10x: Array,

@@ -3,7 +3,7 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-input_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs") #Eric edit
+input_path = Path("/mnt/Data/kidney/final_fibscores_no_omniseg_ndpis/inputs") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation/omni-seg/input")
