@@ -1,6 +1,9 @@
 # apex install
 omni-seg/apex/
 
+# inputs 
+directory_paths
+
 # outputs
 clinical_patches/
 final_merge/

@@ -16,8 +16,8 @@ import openslide
 from matplotlib import pyplot as plt
 
 ## inputs ##
-ndpi_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs/BR21-2075-B-A-1-7-TRI- 2022-11-09 17.44.42.ndpi")
-zarr_path = Path("/home/riware@netid.washington.edu/Documents/kidney/full_pipeline_inputs/22-2075B_region.zarr")
+ndpi_path = Path("/home/riware/Desktop/loose_files/ndpis/21-2013 A-1-9 Trich - 2021-03-22 15.05.44.ndpi")
+zarr_path = Path("/home/riware/Desktop/loose_files/ndpis/21-2013_A_testregion.zarr")
 
 #############
 
@@ -46,13 +46,12 @@ plt.imshow(preview_region)
 plt.show()
 
 # DEFINE REGION #
-region = slide.read_region(location=(1000, 15000),level=0,size=(40000, 16000))
+region = slide.read_region(location=(3000, 15000),level=0,size=(8000, 9000))
 #################
 
 # Show Region #
 plt.imshow(region)
 plt.show()
-quit()
 
 s0_array = np.array(region)[:,:,:3]
 dask_array = dask.array.from_array(s0_array, chunks="auto")

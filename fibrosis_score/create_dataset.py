@@ -19,11 +19,11 @@ def collect_image_mask_pairs(root_path):
                     if mask_candidates:
                         pairs.append((im_file, mask_candidates[0]))
 
-            # Collect new-style files: *_rand_roi.tif
-            rachel_style_images = list(folder.glob('*_rand_roi.tif'))
+            # Collect new-style files: *region*.tif
+            rachel_style_images = list(folder.glob('*_region.tif'))
             for im_file in rachel_style_images:
-                base = im_file.stem.replace('_rand_roi', '')
-                mask_candidates = list(folder.glob(f'{base}_rand_roi_mask_*.tif'))
+                base = im_file.stem.replace('_region', '')
+                mask_candidates = list(folder.glob(f'{base}_region_mask*.tif'))
                 if mask_candidates:
                     pairs.append((im_file, mask_candidates[0]))
 
@@ -54,4 +54,4 @@ def process_and_split(root_path, train_ratio=0.9):
     save_pairs(val_pairs, validation_dir)
 
 if __name__ == "__main__":
-    process_and_split("/mnt/Data/kidney/rachel_training_data_10x/glom/carter_rachel_glom_annotations")
+    process_and_split("/home/riware/Desktop/loose_files/glom_annotations/carter_glom_annotations_consolidated_formatted_triplesclerosed")

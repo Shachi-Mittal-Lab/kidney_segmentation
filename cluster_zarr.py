@@ -62,16 +62,13 @@ from scipy.ndimage import label
 import torch
 import torchvision.transforms as T
 
-def run_full_pipeline(
+def cluster(
         input_path: Path,
         png_path: Path,
         threshold: int,
         offset: Coordinate,
         axis_names: list,
         gray_cluster_centers: Path,
-        output_directory: Path,
-        omni_seg_path: Path,
-        subprocesswd: Path,
 ):
 
     # check there is a GPU
@@ -101,7 +98,6 @@ def run_full_pipeline(
         print(f"File must be of format .ndpi or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
     
-    quit()
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
@@ -192,22 +188,6 @@ def run_full_pipeline(
     fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask = (
         prepare_clustering_masks(zarr_path, s0_array)
     )
-    # prepare histological segmentation mask locations in zarr (10x)
-    pt_mask_10x, dt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
-    # prepare histological segmentation mask locations in zarr (40x)
-    pt_mask, dt_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
-
-    # prepare postprocessing masks in zarr (40x)
-    tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fininflamm_mask = (
-        prepare_postprocessing_masks(zarr_path, s0_array)
-    )
-    # prep mask for cap at 10x
-    cap_mask10x = prepare_mask(zarr_path, s2_array, "cap10x")
-
-    # create text file for fibrosis score data
-    txt_path = input_path.with_suffix(".txt")
-    with open(txt_path, "w") as f:
-        f.writelines("ROI fibrosis scores \n")
 
     print("Clustering")
     for offset in tqdm(offsets_final):
@@ -250,174 +230,18 @@ def run_full_pipeline(
             structuralcollagen_mask,
         )
 
-    # begin u-net preds: define preprocessing & patch size
-    inp_transforms = T.Compose(
-        [
-            T.Grayscale(),
-            T.ToTensor(),
-            T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
-        ]
-    )
-    patch_shape_final = Coordinate(512, 512)
-    patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
+input_path = Path("/home/riware/Desktop/loose_files/clustering_investigation_04Aug2025/BR22-2097-A-1-9-TRICHROME - 2022-11-11 17.54.03.ndpi")
+png_path = Path("/home/riware/Desktop/loose_files/clustering_investigation_04Aug2025")
 
-    print("Predicting Gloms with U-Net")
-    #### Use U-net to predict gloms ####
-
-    # load glom model
-    # model = torch.load("model_dataset1_flips_eric.pt", weights_only=False) before
-    model = torch.load("model_unet_dataset2_glom0_200.pt", weights_only=False)
-
-    # predict
-    model_prediction(cap_mask_10x, s2_array, patch_size_final, model, device, "Cap ID")
-
-    # remove small objects from cap mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
-    )
-
-    print("Predicting proximal tubules with U-Net")
-    #### Use U-net to predict pt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_unet_dataset6_pt2_200.pt", weights_only=False)
-    # predict
-    model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
-
-    print("Predicting distal tubules with U-Net")
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_unet_dataset6_dt3_200.pt", weights_only=False)
-    # predict
-    model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
-
-    # assign pixels that were postive in both the pt and dt masks to pt for simplicity 
-    dt_mask_10x.data = dask.array.where((pt_mask_10x.data == 1) & (dt_mask_10x.data == 1), 0, dt_mask_10x.data)
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_dataset1_vessel0_400.pt", weights_only=False)
-    # predict
-    model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
-    # remove small objects from vessel mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
-    )
-
-    upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
-
-    # blockwise upsample from 10x to 40x
-    upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
-    upsample(pt_mask_10x, pt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(dt_mask_10x, dt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
-
-    # scale eroded foreground mask to 40x from 5x for final multiplications
-    fg_eroded = open_ds(zarr_path / "mask" / "foreground_eroded")  # in s3
-    upsampling_factor = fg_eroded.voxel_size / vessel_mask.voxel_size
-    fg_eroded_s0 = prepare_ds(
-        zarr_path / "mask" / "foreground_eroded_s0",
-        shape=Coordinate(fg_eroded.shape) * upsampling_factor,
-        offset=fg_eroded.offset,
-        voxel_size=vessel_mask.voxel_size,
-        axis_names=fg_eroded.axis_names,
-        units=fg_eroded.units,
-        mode="w",
-        dtype=fg_eroded.dtype,
-    )
-
-    # upsample tissue mask from 5x to 40x
-    tissuemask_upsample(fg_eroded, fg_eroded_s0, s0_array, upsampling_factor)
-
-    print("Identifying TBM")
-    # need to erode and dilate to generate a TBM class
-    id_tbm(dt_mask, pt_mask, structuralcollagen_mask, tbm_mask, s0_array, fg_eroded_s0)
-
-    print("Identifying Bowman's Capsules")
-    # need to erode and dilate to generate Bowman's Capsule class
-    id_bc(
-        fincap_mask,
-        structuralcollagen_mask,
-        fibrosis1_mask,
-        fibrosis2_mask,
-        bc_mask,
-        fg_eroded_s0,
-        s0_array,
-    )
-
-    print("Identifying Structural Collagen around Vessels")
-    # create masks for vessel
-    vessel10xdilated = prepare_mask(zarr_path, s2_array, "vessel10xdilated")
-    vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
-
-    # size of dilation of smallest object
-    varied_vessel_dilation(3, vessel_mask_10x, vessel10xdilated)
-
-    ################################################
-    # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
-    finfib_mask.data = (
-        (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
-        * (1 - vessel_mask.data)
-        * (1 - vessel40xdilated.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
-        * (1 - fincap_mask.data)
-        * (1 - tbm_mask.data)
-        * fg_eroded_s0.data
-    )
-
-    dask.array.store(finfib_mask.data, finfib_mask._source_data)
-
-    # create final collagen overlay
-    fincollagen_mask.data = (
-        (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
-        * (1 - fincap_mask.data)
-        * (1 - vessel_mask.data)
-        * fg_eroded_s0.data
-    )
-
-    dask.array.store(fincollagen_mask.data, fincollagen_mask._source_data)
-
-    # create final inflammation overlay
-    fininflamm_mask.data = (
-        inflammation_mask.data
-        * (1 - vessel_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
-        * (1 - fincap_mask.data)
-        * (1 - vessel_mask.data)
-    )
-    dask.array.store(fininflamm_mask.data, fininflamm_mask._source_data)
-
-    # calculate ROI fibrosis score & save to txt file
-    with open(Path(zarr_path.parent / "fibpx.txt"), "w") as f:
-        f.writelines("# Fibrosis Pixels per Block \n")
-    with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
-        f.writelines("# Tissue Pixels per Block \n")
-
-
-    # blockwise mask multiplications
-    calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, s0_array)
-
-    fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
-    tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))
-
-    total_fibpx = np.sum(fibpx)
-    total_tissuepx = np.sum(tissuepx)
-    total_fibscore = (total_fibpx / total_tissuepx) * 100
-
-    with open(txt_path, "a") as f:
-        f.writelines(f"Final score: {total_fibscore}")
-        
-    return
+# background threshold
+threshold = 50
+# slide offset (zero)
+offset = (0, 0)
+# axis names
+axis_names = [
+    "x",
+    "y",
+    "c^",
+]
+grayscale_cluster_centers = Path("/home/riware/Documents/MittalLab/kidney_project/kidney_segmentation/fibrosis_score/average_centers_5.txt")
+cluster(input_path, png_path, threshold, offset, axis_names, grayscale_cluster_centers)
