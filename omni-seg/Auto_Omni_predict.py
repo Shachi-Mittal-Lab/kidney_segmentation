@@ -11,7 +11,7 @@ import traceback
 #to prevent computer freeze
 from threading import Thread
 
-sys.path.append('/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation')
+sys.path.append('/media/mrl/Data/pipeline_connection/kidney_segmentation/')
 
 from directory_paths import subprocess_step1, subprocess_step1_5, subprocess_step2,subprocess_step2, subprocess_step3, result_output_list, result_input_list, inputdir, output_directory
 

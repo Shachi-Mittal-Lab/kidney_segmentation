@@ -10,7 +10,7 @@ from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 
 # image to visualize
-zarr_path = Path("/mnt/Data/kidney/final_fibscores_omniseg/22-2062A_region.zarr")
+zarr_path = Path("/media/mrl/Data/pipeline_connection/Unet_eval_regions/kpmp_dataset/BR21-2049-B-A-1-9-TRICHROME - 2022-11-09 16.43.38.zarr")
 zarr_folder = zarr_path.parent
 zarr_name = zarr_path.stem 
 raw_path = zarr_path / "raw" / "s0"
@@ -122,8 +122,8 @@ cap_data = cap._source_data[
 # Generate overlays
 # overlay_roi(roi_data, fib_data, red, zarr_folder / f"{zarr_name}_{identifier}_fibrosis_red.png")
 # overlay_roi(roi_data, collagen_data, yellow, zarr_folder / f"{zarr_name}_{identifier}_structural_collagen_yellow.png")
-overlay_roi(roi_data, inflamm_data, fuchsia, zarr_folder / f"{zarr_name}_{identifier}_inflammation_fuchsia.png")
+# overlay_roi(roi_data, inflamm_data, fuchsia, zarr_folder / f"{zarr_name}_{identifier}_inflammation_fuchsia.png")
 # overlay_roi(roi_data, dt_data, green, zarr_folder / f"{zarr_name}_{identifier}_dt_green.png")
 # overlay_roi(roi_data, pt_data, orange, zarr_folder / f"{zarr_name}_{identifier}_pt_orange.png")
 # overlay_roi(roi_data, vessel_data, pink, zarr_folder / f"{zarr_name}_{identifier}_vessel_pink.png")
-# overlay_roi(roi_data, cap_data, white, zarr_folder / f"{zarr_name}_{identifier}_glom_white.png")
+overlay_roi(roi_data, cap_data, white, zarr_folder / f"{zarr_name}_{identifier}_glom_white.png")

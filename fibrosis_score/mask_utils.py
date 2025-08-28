@@ -109,6 +109,7 @@ def prepare_postprocessing_masks(zarr_path, ref_array):
     fincap_mask = prepare_mask(zarr_path, ref_array, "fincap")
     finfib_mask = prepare_mask(zarr_path, ref_array, "finfib")
     fincollagen_mask = prepare_mask(zarr_path, ref_array, "fincollagen")
+    fincollagen_exclusion_mask = prepare_mask(zarr_path, ref_array, "fincollagen_exclusion")
     fininflamm_mask = prepare_mask(zarr_path, ref_array, "fininflamm")
 
     return (
@@ -117,6 +118,7 @@ def prepare_postprocessing_masks(zarr_path, ref_array):
         fincap_mask,
         finfib_mask,
         fincollagen_mask,
+        fincollagen_exclusion_mask,
         fininflamm_mask,
     )
 

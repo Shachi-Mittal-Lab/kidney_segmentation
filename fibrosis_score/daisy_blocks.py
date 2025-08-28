@@ -5,6 +5,7 @@ sys.path.insert(0, '/home/riware@netid.washington.edu/Documents/kidney/kidney_se
 # Repo Tools
 from fibrosis_score.pred_utils import inp_transforms, inp_transforms_rgb
 from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
+from fibrosis_score.processing_utils import print_gpu_usage
 
 # Funke Lab Tools
 import daisy
@@ -37,26 +38,72 @@ def model_prediction(
         inslices = s2_array._Array__slices(block.read_roi)
         # it was [:, 0:512, 0:512]
         # we want [0:512, 0:512, :]
-        inslices = (inslices[1], inslices[2], inslices[0])
+        #inslices = (inslices[1], inslices[2], inslices[0])
         img = Image.fromarray(s2_array[inslices])
         input = inp_transforms(img).unsqueeze(1).to(device)
+        model.eval()
         with torch.no_grad():
             preds = model(input)
             preds = preds.squeeze().squeeze().cpu().detach().numpy()
             preds = preds > 0.5
-        mask[block.write_roi] = preds
+        mask[block.write_roi] = preds[208:848,208:848] # center 640 crop - receptive field 396 then multiple of 32 to make 416 padding
 
     pred_task = daisy.Task(
         task,
         total_roi=s2_array.roi,
         read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
-        write_roi=Roi((0, 0), patch_size_final),
+        write_roi=Roi((188032, 188032), patch_size_final - 376064), # minus 416 pixels to get 640 pix in world units
         read_write_conflict=False,
         num_workers=2,
         process_function=process_block,
     )
     daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    print(f"patch size final: {patch_size_final}")
+
     return
+
+def model_prediction_lsds(
+    mask: Array,
+    s2_array: Array,
+    patch_size_final: Array,
+    model: torch.nn.Module,
+    binary_head: torch.nn.Module,
+    device: torch.device,
+    task: str,
+):
+
+    def process_block(block: daisy.Block):
+        # in data slice
+        inslices = s2_array._Array__slices(block.read_roi)
+        # it was [:, 0:512, 0:512]
+        # we want [0:512, 0:512, :]
+        #inslices = (inslices[1], inslices[2], inslices[0])
+        img = Image.fromarray(s2_array[inslices])
+        input = inp_transforms(img).unsqueeze(1).to(device)
+        model.eval()
+        binary_head.eval()
+        with torch.no_grad():
+            embedding = model(input)
+            preds = binary_head(embedding)
+            preds = preds[:,0,:,:]
+            preds = preds.squeeze().cpu().detach().numpy()
+            preds = preds > 0.5
+        mask[block.write_roi] = preds[208:848,208:848]
+
+    pred_task = daisy.Task(
+        task,
+        total_roi=s2_array.roi,
+        read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
+        write_roi=Roi((188032, 188032), patch_size_final -  376064),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=process_block,
+    )
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    print(f"patch size final: {patch_size_final}")
+
+    return
+
 
 def model_prediction_rgb(
     mask: Array,
@@ -157,6 +204,8 @@ def id_tbm(
     dt_mask: Array,
     pt_mask: Array,
     structuralcollagen_mask: Array,
+    fibrosis1_mask: Array, 
+    fibrosis2_mask: Array,
     tbm_mask: Array,
     s0_array: Array,
     fg_eroded_s0: Array,
@@ -170,11 +219,14 @@ def id_tbm(
     def tbm_block(block: daisy.Block):
         pt_data = dt_mask[block.read_roi]
         dt_data = pt_mask[block.read_roi]
-        cluster = structuralcollagen_mask[block.read_roi]
+        cluster_structural = structuralcollagen_mask[block.read_roi]
+        cluster_fibrosis1 = fibrosis1_mask[block.read_roi]
+        cluster_fibrosis2 = fibrosis2_mask[block.read_roi]
+        cluster_no_inflamm = cluster_structural + cluster_fibrosis1 + cluster_fibrosis2
         tubules = pt_data + dt_data
         eroded_tubules = binary_erosion(tubules, erode_kernel)
         tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
-        tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster
+        tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster_no_inflamm
         tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
         tbm_mask[block.write_roi] = tbm
 

@@ -50,8 +50,9 @@ def pred_cortex(inarray, offsets, patch_size, patch_spacing, pred_mask, device):
             slices = pred_mask._Array__slices(roi.grow(-context, -context))
             pred_mask._source_data[slices] = pred
             pred_mask._source_data[:] = pred_mask._source_data[:] == 1
-    # remove vgg16 from gpu memmory
+    # remove vgg16 from gpu memory
     del vgg16
+    torch.cuda.empty_cache()
     return
 
 # Unet stuff
