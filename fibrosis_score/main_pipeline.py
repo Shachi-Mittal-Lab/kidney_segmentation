@@ -102,7 +102,6 @@ def run_full_pipeline(
         print(f"File must be of format .ndpi or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
     
-    quit()
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
@@ -114,7 +113,7 @@ def run_full_pipeline(
     dask.array.store(mask, store_fgbg)
 
     # fill holes & erode foreground mask
-    filled_fmask._source_data[:] = fill_holes(mask, filldisk=23, shrinkdisk=18)
+    filled_fmask._source_data[:] = fill_holes(mask, filldisk=31, shrinkdisk=28)
     eroded_fmask._source_data[:] = erode(filled_fmask._source_data[:], shrinkdisk=40)
 
     # create integral mask of filled foreground mask and save
@@ -281,6 +280,10 @@ def run_full_pipeline(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
     )
 
+    cap_mask_10x._source_data[:] = remove_small_holes(
+        cap_mask_10x._source_data[:].astype(bool), area_threshold=1000
+    )
+
     print("Predicting proximal tubules with U-Net")
     #### Use U-net to predict pt ####
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
@@ -304,7 +307,7 @@ def run_full_pipeline(
     model = torch.load("model_unet_dataset6_dt3_200.pt", weights_only=False)
     # predict
     model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
-
+    
     # assign pixels that were postive in both the pt and dt masks to pt for simplicity 
     dt_mask_10x.data = dask.array.where((pt_mask_10x.data == 1) & (dt_mask_10x.data == 1), 0, dt_mask_10x.data)
 
@@ -313,7 +316,7 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_dataset1_vessel0_400.pt", weights_only=False)
+    model = torch.load("model_unet_dataset3_vessel0_final.pt", weights_only=False)
     # predict
     model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
     # remove small objects from vessel mask
@@ -368,23 +371,31 @@ def run_full_pipeline(
     vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
 
     # size of dilation of smallest object
+    print("Dilating Vessels")
     varied_vessel_dilation(3, vessel_mask_10x, vessel10xdilated)
+    print("Saving Dilation")
     upsampling_factor = vessel10xdilated.voxel_size / vessel40xdilated.voxel_size
+    print("Upsampling Dilation")
     upsample(vessel10xdilated, vessel40xdilated, upsampling_factor, s2_array, s0_array)
     #vessel_40x_dilated = open_ds(zarr_path / "mask" / "vessel40xdilated", mode="a")
+    print("Saving Upsample")
     vessel40xdilated.data = (
         vessel40xdilated.data
-        * (1-inflammation_mask.data)
+        * (1 - inflammation_mask.data)
         * (1 - dt_mask.data)
         * (1 - pt_mask.data)
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
+        * (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
         * (fg_eroded_s0.data)
     )
-    dask.array.store(vessel40xdilated.data, vessel40xdilated._source_data)
+    vessel_store = dask.array.store(vessel40xdilated.data, vessel40xdilated._source_data, execute=False)
+    dask.compute(vessel_store)
+    print("Completed Saving Upsampling")
 
     ################################################
+    print("Calculating Fibrosis Mask")
     # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
     finfib_mask.data = (
         (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
@@ -397,9 +408,14 @@ def run_full_pipeline(
         * (1 - bc_mask.data)
         * fg_eroded_s0.data
     )
+    print("Saving Fibrosis Mask")
+    # execute multiplication
+    finfib_store = dask.array.store(finfib_mask.data, finfib_mask._source_data, compute=False)
+    # save blockwise
+    dask.compute(finfib_store)
 
-    dask.array.store(finfib_mask.data, finfib_mask._source_data)
-
+    print("Completed Saving Fibrosis Mask")
+    print("Calculating Collagen Overlay")
     # create final collagen overlay
     fincollagen_mask.data = (
         (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
@@ -409,9 +425,15 @@ def run_full_pipeline(
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data
     )
+    fincollagen_mask.data = fincollagen_mask.data >> 0
+    print("Saving Fibrosis Overlay")
+    # execute multiplication
+    fincollagen_store = dask.array.store(fincollagen_mask.data, fincollagen_mask._source_data, compute=False)
+    # store blockwise
+    dask.compute(fincollagen_store)
 
-    dask.array.store(fincollagen_mask.data, fincollagen_mask._source_data)
-
+    print("Compeleted Saving Fibrosis Overlay")
+    print("Calculating Collagen Mask with Exclusion")
     # create final collagen exclusion overlay
     fincollagen_exclusion_mask.data = (
         (vessel40xdilated.data + tbm_mask.data + bc_mask.data)
@@ -421,9 +443,15 @@ def run_full_pipeline(
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data
     )
+    
+    print("Saving Collagen Mask with Exclusion")
+    # execulte multiplication
+    fincollagen_exclusion_store = dask.array.store(fincollagen_exclusion_mask.data, fincollagen_exclusion_mask._source_data, compute=False)
+    # store blockwise
+    dask.compute(fincollagen_exclusion_store)
+    print("Completed Saving Collagen Mask with Exclusion")
 
-    dask.array.store(fincollagen_exclusion_mask.data, fincollagen_exclusion_mask._source_data)
-
+    print("Calculating Inflammation Mask")
     # create final inflammation overlay
     fininflamm_mask.data = (
         inflammation_mask.data
@@ -433,17 +461,27 @@ def run_full_pipeline(
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
     )
-    dask.array.store(fininflamm_mask.data, fininflamm_mask._source_data)
+    print("Saving Inflammation Mask")
+    # execute multiplication
+    inflamm_store = dask.array.store(fininflamm_mask.data, fininflamm_mask._source_data, compute=False)
+    # store blockwise
+    dask.compute(inflamm_store)
+    print("Completed Saving Inflammation Mask")
 
     # apply edge tissue mask to remaining masks
+    print("Applying Foreground Mask to Masks")
     fincap_mask.data = fincap_mask.data * fg_eroded_s0.data
-    dask.array.store(fincap_mask.data, fincap_mask._source_data)
+    fincap_store = dask.array.store(fincap_mask.data, fincap_mask._source_data, execute=False)
+    dask.compute(fincap_store)
     pt_mask.data = pt_mask.data * fg_eroded_s0.data
-    dask.array.store(pt_mask.data, pt_mask._source_data)
+    pt_store = dask.array.store(pt_mask.data, pt_mask._source_data, execute=False)
+    dask.compute(pt_store)
     dt_mask.data = dt_mask.data * fg_eroded_s0.data
-    dask.array.store(dt_mask.data, dt_mask._source_data)
+    dt_store = dask.array.store(dt_mask.data, dt_mask._source_data, execute=False)
+    dask.compute(dt_store)
     vessel_mask.data = vessel_mask.data * fg_eroded_s0.data
-    dask.array.store(vessel_mask.data, vessel_mask._source_data)
+    fin_vessel_store = dask.array.store(vessel_mask.data, vessel_mask._source_data, execute=False)
+    dask.compute(fin_vessel_store)
 
     # calculate ROI fibrosis score & save to txt file
     with open(Path(zarr_path.parent / "fibpx.txt"), "w") as f:
@@ -451,8 +489,8 @@ def run_full_pipeline(
     with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
         f.writelines("# Tissue Pixels per Block \n")
 
-
     # blockwise mask multiplications
+    print("Calculating Fibrosis Score")
     calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, s0_array)
 
     fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
@@ -461,6 +499,8 @@ def run_full_pipeline(
     total_fibpx = np.sum(fibpx)
     total_tissuepx = np.sum(tissuepx)
     total_fibscore = (total_fibpx / total_tissuepx) * 100
+
+    print("Fibrosis Score Calculated")
 
     with open(txt_path, "a") as f:
         f.writelines(f"Final score: {total_fibscore}")

@@ -254,7 +254,7 @@ def id_bc(
 ):
     erode_kernel = disk(14, decomposition="sequence")
     dilate_kernel = disk(
-        9, decomposition="sequence"
+        51, decomposition="sequence"
     )  # sequence for computational efficiency
 
     def bc_block(block: daisy.Block):

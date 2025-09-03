@@ -3,7 +3,7 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-input_path = Path("/run/user/1000/gvfs/smb-share:server=mittal-mrl-nas,share=research%20data/RW_full_pipeline_preds") #Eric edit
+input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/full_pipeline_preds_new_unets02Sept2025_newvessel") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/input")
