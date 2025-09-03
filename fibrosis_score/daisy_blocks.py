@@ -344,10 +344,38 @@ def calculate_fibscore(
     fibscore_task = daisy.Task(
         "fibscore calc",
         total_roi=s0_array.roi,
-        read_roi=Roi((0, 0), (1000000, 1000000)),
-        write_roi=Roi((0, 0), (1000000, 1000000)),
+        read_roi=Roi((0, 0), (200000, 200000)),
+        write_roi=Roi((0, 0), (200000, 200000)),
         read_write_conflict=False,
         num_workers=2,
         process_function=fibscore_block,
     )
     daisy.run_blockwise(tasks=[fibscore_task], multiprocessing=False)
+
+def calculate_inflammscore(
+        fininflamm_mask: Array,
+        zarr_path: Path,
+        s0_array: Array,
+):
+# blockwise mask multiplications
+    def inflammscore_block(block: daisy.Block):
+        # in data
+        inflamm = fininflamm_mask[block.read_roi]
+        # calc positive pixels in mask
+        inflammpx = np.count_nonzero(inflamm)
+
+        # write to text file
+        # create text file
+        with open(Path(zarr_path.parent / "inflammpx.txt"), "a") as f:
+            f.writelines(f"{inflammpx} \n")
+
+    inflammscore_task = daisy.Task(
+        "inflammscore calc",
+        total_roi=s0_array.roi,
+        read_roi=Roi((0, 0), (200000, 200000)),
+        write_roi=Roi((0, 0), (200000, 200000)),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=inflammscore_block,
+    )
+    daisy.run_blockwise(tasks=[inflammscore_task], multiprocessing=False)

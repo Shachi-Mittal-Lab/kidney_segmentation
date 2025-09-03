@@ -460,6 +460,7 @@ def run_full_pipeline(
         * (1 - pt_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
+        * fg_eroded_s0.data
     )
     print("Saving Inflammation Mask")
     # execute multiplication
@@ -495,14 +496,18 @@ def run_full_pipeline(
 
     fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
     tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))
+    print("Calculating Inflammation Score")
+    inflammpx = np.loadtxt(Path(zarr_path.parent / "inflammpx.txt"), comments="#", dtype=int)
 
     total_fibpx = np.sum(fibpx)
+    total_inflammpx = np.sum(inflammpx)
     total_tissuepx = np.sum(tissuepx)
     total_fibscore = (total_fibpx / total_tissuepx) * 100
+    total_inflammscore = (total_inflammpx / total_tissuepx) * 100 
 
     print("Fibrosis Score Calculated")
 
     with open(txt_path, "a") as f:
-        f.writelines(f"Final score: {total_fibscore}")
+        f.writelines(f"Final Fibscore: {total_fibscore} \n Final Inflammscore: {total_inflammscore}")
         
     return
