@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import dask.array as da
 
-input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/full_pipeline_preds_new_unets01Sep2025_newvessel")
+input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/full_pipeline_preds_DrSetty_04Sep2025/bleh")
 
 input_files = [x for x in input_path.glob("*")]
 print(f"input files: {input_files}")
@@ -79,6 +79,7 @@ for zarr_path in input_files:
     finfib_in_color.data = finfib_expanded * s0_array.data
     da.store(finfib_in_color.data, finfib_in_color._source_data)
 
+    """
     ### CREATE STRUCTURAL COLLAGEN RGB VISUALIZATION ###
     # format image of structural collagen
     fincollagen_in_color = prepare_ds(
@@ -92,13 +93,14 @@ for zarr_path in input_files:
         dtype=np.uint8,
     )
 
-    # save image of just fibrosis class 
+    # save image of just fin collagen
     fincollagen =  open_ds(zarr_path / "mask" / "fincollagen")
     fincollagen.data = fincollagen.data > 0
     fincollagen_expanded = fincollagen.data[:,:,None]
     mask_broadcasted = da.broadcast_to(fincollagen_expanded, s0_array.shape)
     fincollagen_in_color.data = fincollagen_expanded * s0_array.data
     da.store(fincollagen_in_color.data, fincollagen_in_color._source_data)
+    """
 
     ### CREATE STRUCTURAL COLLAGEN RGB VISUALIZATION ###
     # format image of structural collagen
@@ -113,7 +115,7 @@ for zarr_path in input_files:
         dtype=np.uint8,
     )
 
-    # save image of just fibrosis class 
+    # save image of just fin collagen exclusion 
     fincollagen_exclusion =  open_ds(zarr_path / "mask" / "fincollagen_exclusion")
     fincollagen_exclusion.data = fincollagen_exclusion.data > 0
     fincollagen_exclusion_expanded = fincollagen_exclusion.data[:,:,None]
@@ -121,6 +123,7 @@ for zarr_path in input_files:
     fincollagen_exclusion_in_color.data = fincollagen_exclusion_expanded * s0_array.data
     da.store(fincollagen_exclusion_in_color.data, fincollagen_exclusion_in_color._source_data)
 
+    """
     ### CREATE HISTOLOGICAL SEGMENTATION RGB VISUALIZATION ###
     # format image of hist mask
     histseg_in_color = prepare_ds(
@@ -174,3 +177,5 @@ for zarr_path in input_files:
     mask_broadcasted = da.broadcast_to(histseginflamm_expanded, s0_array.shape)
     histseginflamm_in_color.data = mask_broadcasted * s0_array.data
     da.store(histseginflamm_in_color.data, histseginflamm_in_color._source_data)
+    """
+    print(f"Finished {zarr_path}")

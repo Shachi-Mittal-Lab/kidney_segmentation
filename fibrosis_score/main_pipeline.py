@@ -23,7 +23,8 @@ from fibrosis_score.daisy_blocks import (
     id_tbm,
     id_bc,
     downsample_vessel,
-    calculate_fibscore
+    calculate_fibscore,
+    calculate_inflammscore,
 )
 
 # Funke Lab Tools
@@ -489,25 +490,33 @@ def run_full_pipeline(
         f.writelines("# Fibrosis Pixels per Block \n")
     with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
         f.writelines("# Tissue Pixels per Block \n")
+    with open(Path(zarr_path.parent / "inflammpx.txt"), "w") as f:
+        f.writelines("# Inflammation Pixels per Block \n")
+    with open(Path(zarr_path.parent / "interstitiumpx.txt"), "w") as f:
+        f.writelines("# Interstitium Pixels per Block \n")
 
     # blockwise mask multiplications
     print("Calculating Fibrosis Score")
     calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, s0_array)
-
     fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
     tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))
+
     print("Calculating Inflammation Score")
+    calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, s0_array)
     inflammpx = np.loadtxt(Path(zarr_path.parent / "inflammpx.txt"), comments="#", dtype=int)
+    interstitiumpx = np.loadtxt(Path(zarr_path.parent / "interstitiumpx.txt", comments="#", dtype=int))
 
     total_fibpx = np.sum(fibpx)
     total_inflammpx = np.sum(inflammpx)
     total_tissuepx = np.sum(tissuepx)
+    total_interstitiumpx = np.sum(interstitiumpx)
     total_fibscore = (total_fibpx / total_tissuepx) * 100
-    total_inflammscore = (total_inflammpx / total_tissuepx) * 100 
+    total_inflammscore = (total_inflammpx / total_interstitiumpx) * 100 
 
     print("Fibrosis Score Calculated")
+    print("Inflammation Score Calculated")
 
     with open(txt_path, "a") as f:
-        f.writelines(f"Final Fibscore: {total_fibscore} \n Final Inflammscore: {total_inflammscore}")
+        f.writelines(f"Final Fibscore: {total_fibscore} \nFinal Inflammscore: {total_inflammscore}")
         
     return
