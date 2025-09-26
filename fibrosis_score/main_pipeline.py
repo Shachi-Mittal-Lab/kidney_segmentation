@@ -25,6 +25,7 @@ from fibrosis_score.daisy_blocks import (
     downsample_vessel,
     calculate_fibscore,
     calculate_inflammscore,
+    remove_small_fib,
 )
 
 # Funke Lab Tools
@@ -282,7 +283,7 @@ def run_full_pipeline(
     )
 
     cap_mask_10x._source_data[:] = remove_small_holes(
-        cap_mask_10x._source_data[:].astype(bool), area_threshold=1000
+        cap_mask_10x._source_data[:].astype(bool), area_threshold=3000
     )
 
     print("Predicting proximal tubules with U-Net")
@@ -305,7 +306,7 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_unet_dataset6_dt3_200.pt", weights_only=False)
+    model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
     # predict
     model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
     
@@ -414,6 +415,9 @@ def run_full_pipeline(
     finfib_store = dask.array.store(finfib_mask.data, finfib_mask._source_data, compute=False)
     # save blockwise
     dask.compute(finfib_store)
+
+    print("Removing Small Fibrosis Objects")
+    remove_small_fib(finfib_mask, s0_array)
 
     print("Completed Saving Fibrosis Mask")
     print("Calculating Collagen Overlay")

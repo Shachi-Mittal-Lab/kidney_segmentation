@@ -3,7 +3,7 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/full_pipeline_preds_DrSetty_04Sep2025/bleh") #Eric edit
+input_path = Path("/media/rachel/Data/kidney/threshold investigation") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/input")
@@ -21,15 +21,15 @@ axis_names = [
 
 # cortex vs medulla model info
 cortmed_weights_path = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/model5_epoch8.pt" #Eric edit
+    "/media/rachel/Data/kidney/kidney_segmentation/model5_epoch8.pt" #Eric edit
 )
 cortmed_starting_model_path = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/starting_model.pt" #Eric edit
+    "/media/rachel/Data/kidney/kidney_segmentation/starting_model.pt" #Eric edit
 )
 
 # kmeans clustering centers
 gray_cluster_centers = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/fibrosis_score/average_centers_5.txt" #Eric edit
+    "/media/rachel/Data/kidney/kidney_segmentation/fibrosis_score/average_centers_5.txt" #Eric edit
 )
 
 # omni-seg output path

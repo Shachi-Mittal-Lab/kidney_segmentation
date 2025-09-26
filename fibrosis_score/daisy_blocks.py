@@ -19,6 +19,7 @@ import numpy as np
 from skimage.morphology import (
     binary_erosion,
     binary_dilation,
+    remove_small_objects,
     disk,
 )
 from skimage.filters import gaussian
@@ -312,6 +313,32 @@ def downsample_vessel(
         process_function=downsample_block,
     )
     daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
+
+def remove_small_fib(
+        finfib_mask: Array,
+        s0_array: Array,
+):
+# blockwise mask multiplications
+    def fibfilter_block(block: daisy.Block):
+        # in data
+        fib = finfib_mask[block.read_roi]
+
+        # remove small fib sections
+        filtered_fib = remove_small_objects(fib.astype(bool), min_size=3000)
+        finfib_mask[block.write_roi] = filtered_fib
+
+
+    fibfilter_task = daisy.Task(
+        "Fibrosis Filtering",
+        total_roi=s0_array.roi,
+        read_roi=Roi((0, 0), (1000000, 1000000)),
+        write_roi=Roi((0, 0), (1000000, 1000000)),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=fibfilter_block,
+    )
+    daisy.run_blockwise(tasks=[fibfilter_task], multiprocessing=False)
+
 
 def calculate_fibscore(
         finfib_mask: Array,
