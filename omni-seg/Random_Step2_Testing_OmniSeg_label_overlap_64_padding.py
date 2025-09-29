@@ -649,8 +649,8 @@ def natural_keys(text):
 if __name__ == '__main__':
 
     # Needs to be a variable or fixed somewhere
-    data_dir = '/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation/omni-seg/outputs/clinical_patches'
-    output_dir = '/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation/omni-seg/outputs/segmentation_merge'
+    data_dir = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/clinical_patches'
+    output_dir = '/media/mrl/Data/pipeline_connection/kidney_segmentation/omni-seg/outputs/segmentation_merge'
     
     cases = glob.glob(os.path.join(data_dir, '*'))
     cases.sort(key=natural_keys)

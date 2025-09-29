@@ -16,8 +16,8 @@ import openslide
 from matplotlib import pyplot as plt
 
 ## inputs ##
-ndpi_path = Path("/home/riware/Desktop/loose_files/ndpis/21-2013 A-1-9 Trich - 2021-03-22 15.05.44.ndpi")
-zarr_path = Path("/home/riware/Desktop/loose_files/ndpis/21-2013_A_testregion.zarr")
+ndpi_path = Path("/media/rachel/Data/kidney/threshold investigation/21-2018 A-1-9 Trich - 2021-03-22 16.15.24.ndpi")
+zarr_path = Path("/media/rachel/Data/kidney/threshold investigation/21-2018 A-1-9 Trich - 2021-03-22 16.15.24_region.zarr")
 
 #############
 
@@ -46,7 +46,8 @@ plt.imshow(preview_region)
 plt.show()
 
 # DEFINE REGION #
-region = slide.read_region(location=(3000, 15000),level=0,size=(8000, 9000))
+# left/right , up/down
+region = slide.read_region(location=(28000, 20000),level=0,size=(10000, 10000))
 #################
 
 # Show Region #

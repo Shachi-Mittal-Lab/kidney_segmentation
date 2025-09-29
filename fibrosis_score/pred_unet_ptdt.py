@@ -38,9 +38,9 @@ s0_array = open_ds(zarr_path / "raw" / "s0")
 
 model = torch.load("model_unet_dataset3_pt0_400.pt", weights_only=False)
 
-# create mask for final dt overlay at 40x
-pt_unet = prepare_ds(
-    zarr_path / "mask" / "pt_unet_3_400",
+# create mask for final dt overlay at 10x
+ptdt_unet = prepare_ds(
+    zarr_path / "mask" / "ptdt_unet",
     s2_array.shape[0:2],
     s2_array.offset,
     s2_array.voxel_size,
@@ -49,11 +49,11 @@ pt_unet = prepare_ds(
     mode="w",
     dtype=np.uint8,
 )
-pt_unet._source_data[:] = 0
+ptdt_unet._source_data[:] = 0
 
 # create mask for final dt overlay at 40x
-pt_unet_40x = prepare_ds(
-    zarr_path / "mask" / "pt_unet_40x_3_400",
+ptdt_unet_40x = prepare_ds(
+    zarr_path / "mask" / "ptdt_unet_40x",
     s0_array.shape[0:2],
     s0_array.offset,
     s0_array.voxel_size,
@@ -62,7 +62,7 @@ pt_unet_40x = prepare_ds(
     mode="w",
     dtype=np.uint8,
 )
-pt_unet_40x._source_data[:] = 0
+ptdt_unet_40x._source_data[:] = 0
 
 inp_transforms = transforms.Compose(
     [
@@ -73,44 +73,44 @@ inp_transforms = transforms.Compose(
 )
 
 # define roi size 
-patch_shape_final = Coordinate(1472, 1472)
+patch_shape_final = Coordinate(512,512)
 patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
 
 # blockwise mask multiplications
-def pt_id_block(block: daisy.Block):
+def ptdt_id_block(block: daisy.Block):
     # in data slice
     inslices = s2_array._Array__slices(block.read_roi)
     # it was [:, 0:512, 0:512]
     # we want [0:512, 0:512, :]
-    inslices = (inslices[1], inslices[2], inslices[0])
+    # inslices = (inslices[1], inslices[2], inslices[0])
     img = Image.fromarray(s2_array[inslices])
     input = inp_transforms(img).unsqueeze(1).to(device)
     with torch.no_grad():
         preds = model(input)
         preds = preds.squeeze().squeeze().cpu().detach().numpy()
         preds = preds > 0.5
-    pt_unet[block.write_roi] = preds
+    ptdt_unet[block.write_roi] = preds
 
-pt_id_task = daisy.Task(
+ptdt_id_task = daisy.Task(
     "PT ID",
     total_roi=s2_array.roi,
     read_roi=Roi((0,0), patch_size_final), # (offset, shape)
     write_roi=Roi((0,0), patch_size_final),
     read_write_conflict=False,
     num_workers=2,
-    process_function=pt_id_block
+    process_function=ptdt_id_block
 )
-daisy.run_blockwise(tasks=[pt_id_task], multiprocessing=False)
+daisy.run_blockwise(tasks=[ptdt_id_task], multiprocessing=False)
 
 # blockwise upsample to 40x
 # upsample 5x eroded tissue mask to use to filter predictions
 upsampling_factor = (4,4)
 def upsample_block(block: daisy.Block):
-    s2_data = pt_unet[block.read_roi]
+    s2_data = ptdt_unet[block.read_roi]
     s0_data = s2_data
     for axis, reps in enumerate(upsampling_factor):
         s0_data = np.repeat(s0_data, reps, axis=axis)
-    pt_unet_40x[block.write_roi] = s0_data
+    ptdt_unet_40x[block.write_roi] = s0_data
 
 block_roi = Roi((0, 0), (1000, 1000)) * s0_array.voxel_size
 upsample_task = daisy.Task(
