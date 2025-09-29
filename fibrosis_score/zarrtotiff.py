@@ -10,7 +10,7 @@ from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 
 # image to visualize
-zarr_path = Path("/home/riware/Desktop/loose_files/glom_annotations/zarrs/BR22-2083-A-1-9-TRICHROME - 2022-11-09 16.01.24.zarr")
+zarr_path = Path("/home/riware/Desktop/loose_files/kpmp_regions/35e623b2-c9e8-4098-85fb-1489d04fc41d_S-2006-003982_TRI_2of2.zarr")
 zarr_folder = zarr_path.parent
 zarr_name = zarr_path.stem
 raw_path = zarr_path / "raw" / "s0"
@@ -47,6 +47,8 @@ def save_img(roi_array, fig_path):
 
 # open raw and define roi location and size
 raw = open_ds(raw_path)
+
+# UIC Regions
 # roi = Roi((0, 0), (10000, 30000)) * raw.voxel_size  # 22-2062A
 # roi = Roi((2000, 1000), (3000, 3000)) * raw.voxel_size # 22-2062A zoom in
 # roi = Roi((6000, 20000), (6000, 40000)) * raw.voxel_size # 21-2062B
@@ -74,7 +76,14 @@ raw = open_ds(raw_path)
 # roi = Roi((35600,25000), (3000,3000)) * raw.voxel_size  # 16A TRI region 2
 # roi = Roi((39000,36250), (3000,3000)) * raw.voxel_size  # 16A TRI region 3
 # roi = Roi((32500,17000), (3000,3000)) * raw.voxel_size  # 22-2099 A TRI region 0
-roi = Roi((56500,47000), (3000,3000)) * raw.voxel_size  # 22-2083 A TRI region 0
+# roi = Roi((56500,47000), (3000,3000)) * raw.voxel_size  # 22-2083 A TRI region 0
+
+# KPMP
+# roi = Roi((10000,47000), (3000,3000)) * raw.voxel_size  # 03f9da88-1dbd-44f3-8a2a-dbefe629898b_S-2308-002019_TRI_1of2 region 0
+# roi = Roi((17500,43500), (3000,3000)) * raw.voxel_size  # 03f9da88-1dbd-44f3-8a2a-dbefe629898b_S-2308-002019_TRI_1of2 region 1
+#roi = Roi((19500,53250), (3000,3000)) * raw.voxel_size  # 28c71a0d-6881-427e-a0e5-d9e0bed7d4a5_S-2406-003315_TRI_2of2 region 0
+roi = Roi((0,0), (20000,20000)) * raw.voxel_size  # 28c71a0d-6881-427e-a0e5-d9e0bed7d4a5_S-2406-003315_TRI_2of2 region 1
+
 
 
 raw_roi = (roi - raw.offset) / raw.voxel_size
@@ -86,8 +95,8 @@ roi_data = raw._source_data[
 # visualize roi
 plt.imshow(roi_data)
 plt.show()
-# quit()
-save_img(roi_data, zarr_folder / f"{zarr_name}_0_region.tiff")
+#quit()
+save_img(roi_data, zarr_folder / f"{zarr_name}_1_region.tiff")
 quit()
 # mask paths
 fib_path = zarr_path / "mask" / "finfib"
@@ -97,11 +106,6 @@ dt_path = zarr_path / "mask" / "dt"
 pt_path = zarr_path / "mask" / "pt"
 vessel_path = zarr_path / "mask" / "vessel"
 cap_path = zarr_path / "mask" / "fincap"
-# clustering mask paths
-fibrosis1 = zarr_path / "mask" / "fibrosis1"
-fibrosis2 = zarr_path / "mask" / "fibrosis1"
-structural_cluster = zarr_path / "mask" / "structuralcollagen"
-inflamm_cluster = zarr_path / "mask" / "inflammation"
 
 # open masks
 fib = open_ds(fib_path)

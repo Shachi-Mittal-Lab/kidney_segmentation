@@ -9,6 +9,7 @@ import tifffile
 import imagecodecs
 import openslide
 import dask.array
+from matplotlib import pyplot as plt
 
 # Open ndpi as zarr array
 def openndpi(ndpi_path, pyramid_level):
@@ -17,6 +18,16 @@ def openndpi(ndpi_path, pyramid_level):
     y_res = float(slide.properties["tiff.YResolution"])
     units = slide.properties["tiff.ResolutionUnit"]
     store = tifffile.imread(ndpi_path, aszarr=True)
+    dask_array = dask.array.from_zarr(store, pyramid_level)
+    store.close()
+    return dask_array, x_res, y_res, units
+
+def opensvs(svs_path, pyramid_level):
+    slide = openslide.OpenSlide(svs_path)
+    x_res = float(slide.properties["openslide.mpp-x"]) * 1000
+    y_res = float(slide.properties["openslide.mpp-y"]) * 1000
+    units = ("nm", "nm")
+    store = tifffile.imread(svs_path, aszarr=True)
     dask_array = dask.array.from_zarr(store, pyramid_level)
     store.close()
     return dask_array, x_res, y_res, units
