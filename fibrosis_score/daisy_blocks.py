@@ -203,8 +203,7 @@ def tissuemask_upsample(
 
 
 def id_tbm(
-    dt_mask: Array,
-    pt_mask: Array,
+    tubule_mask: Array,
     structuralcollagen_mask: Array,
     fibrosis1_mask: Array, 
     fibrosis2_mask: Array,
@@ -219,13 +218,11 @@ def id_tbm(
     )  # sequence for computational efficiency
 
     def tbm_block(block: daisy.Block):
-        pt_data = dt_mask[block.read_roi]
-        dt_data = pt_mask[block.read_roi]
         cluster_structural = structuralcollagen_mask[block.read_roi]
         cluster_fibrosis1 = fibrosis1_mask[block.read_roi]
         cluster_fibrosis2 = fibrosis2_mask[block.read_roi]
         cluster_no_inflamm = cluster_structural + cluster_fibrosis1 + cluster_fibrosis2
-        tubules = pt_data + dt_data
+        tubules = tubule_mask[block.read_roi]
         eroded_tubules = binary_erosion(tubules, erode_kernel)
         tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
         tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster_no_inflamm

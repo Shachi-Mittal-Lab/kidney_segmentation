@@ -196,9 +196,9 @@ def run_full_pipeline(
     )
 
     # prepare histological segmentation mask locations in zarr (10x)
-    pt_mask_10x, dt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
+    tubule_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
     # prepare histological segmentation mask locations in zarr (40x)
-    pt_mask, dt_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
+    tubule_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
 
     # prepare postprocessing masks in zarr (40x)
     tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fincollagen_exclusion_mask, fininflamm_mask = (
@@ -286,7 +286,7 @@ def run_full_pipeline(
         cap_mask_10x._source_data[:].astype(bool), area_threshold=3000
     )
 
-    print("Predicting proximal tubules with U-Net")
+    print("Predicting Tubules with U-Net")
     #### Use U-net to predict pt ####
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
 
@@ -297,21 +297,9 @@ def run_full_pipeline(
     # load model
     model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
     # predict
-    model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
+    model_prediction(tubule_mask_10x, s2_array, patch_size_final, model, device, "Tubule ID")
 
-    print("Predicting distal tubules with U-Net")
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
-    # predict
-    model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
-    
-    # assign pixels that were postive in both the pt and dt masks to pt for simplicity 
-    dt_mask_10x.data = dask.array.where((pt_mask_10x.data == 1) & (dt_mask_10x.data == 1), 0, dt_mask_10x.data)
+    print("Predicting Vessels with U-Net")
 
     #### Use U-net to predict vessel ####
 
@@ -338,8 +326,7 @@ def run_full_pipeline(
 
     # blockwise upsample from 10x to 40x
     upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
-    upsample(pt_mask_10x, pt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(dt_mask_10x, dt_mask, upsampling_factor, s2_array, s0_array)
+    upsample(tubule_mask_10x, tubule_mask, upsampling_factor, s2_array, s0_array)
     upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
 
     # scale eroded foreground mask to 40x from 5x for final multiplications
@@ -361,7 +348,7 @@ def run_full_pipeline(
 
     print("Identifying TBM")
     # need to erode and dilate to generate a TBM class
-    id_tbm(dt_mask, pt_mask, structuralcollagen_mask, fibrosis1_mask, fibrosis2_mask, tbm_mask, s0_array, fg_eroded_s0)
+    id_tbm(tubule_mask, structuralcollagen_mask, fibrosis1_mask, fibrosis2_mask, tbm_mask, s0_array, fg_eroded_s0)
 
     print("Identifying Bowman's Capsules")
     # need to erode and dilate to generate Bowman's Capsule class
@@ -392,8 +379,7 @@ def run_full_pipeline(
     vessel40xdilated_multiplication = (
         vessel40xdilated.data
         * (1 - inflammation_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
+        * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
@@ -411,8 +397,7 @@ def run_full_pipeline(
         (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
         * (1 - vessel_mask.data)
         * (1 - vessel40xdilated.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
+        * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
@@ -436,8 +421,7 @@ def run_full_pipeline(
     # create final collagen overlay
     fincollagen_mask_multiplication = (
         (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
+        * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data
@@ -454,8 +438,7 @@ def run_full_pipeline(
     # create final collagen exclusion overlay
     fincollagen_exclusion_mask_multiplication = (
         (vessel40xdilated.data + tbm_mask.data + bc_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
+        * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data
@@ -473,8 +456,7 @@ def run_full_pipeline(
     fininflamm_mask_multiplication = (
         inflammation_mask.data
         * (1 - vessel_mask.data)
-        * (1 - dt_mask.data)
-        * (1 - pt_mask.data)
+        * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data

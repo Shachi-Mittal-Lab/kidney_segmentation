@@ -79,11 +79,10 @@ def prepare_seg_masks(zarr_path, ref_array, magnification):
     for the outputs of binary u-nets.
     The mask is filled with zeros to begin.
     """
-    pt_mask = prepare_mask(zarr_path, ref_array, f"pt_{magnification}")
-    dt_mask = prepare_mask(zarr_path, ref_array, f"dt_{magnification}")
+    tubule_mask = prepare_mask(zarr_path, ref_array, f"tubule_{magnification}")
     vessel_mask = prepare_mask(zarr_path, ref_array, f"vessel_{magnification}")
     cap_mask = prepare_mask(zarr_path, ref_array, f"cap_{magnification}")
-    return pt_mask, dt_mask, vessel_mask, cap_mask
+    return tubule_mask, vessel_mask, cap_mask
 
 def prepare_omniseg_masks(zarr_path, ref_array):
     """
@@ -91,11 +90,10 @@ def prepare_omniseg_masks(zarr_path, ref_array):
     for the outputs of Omni-Seg.
     The mask is filled with zeros to begin.
     """
-    pt_mask = prepare_mask(zarr_path, ref_array, "pt")
-    dt_mask = prepare_mask(zarr_path, ref_array, "dt")
+    tubule_mask = prepare_mask(zarr_path, ref_array, "tubule")
     ptc_mask = prepare_mask(zarr_path, ref_array, "ptc")
     vessel_mask = prepare_mask(zarr_path, ref_array, "vessel")
-    return pt_mask, dt_mask, ptc_mask, vessel_mask
+    return tubule_mask, ptc_mask, vessel_mask
 
 
 def prepare_postprocessing_masks(zarr_path, ref_array):
