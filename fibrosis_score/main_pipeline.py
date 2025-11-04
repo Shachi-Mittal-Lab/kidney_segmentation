@@ -318,12 +318,20 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_unet_dataset3_vessel0_final.pt", weights_only=False)
+    #model = torch.load("model_unet_dataset8_vessel0wscheduler_200.pt", weights_only=False)
     # predict
-    model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
+    #model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
+
+    model = torch.load("model_unet_dataset10_vessel6_LSDs_700.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset10_vessel6_LSDs_700.pt", weights_only=False)
+    # predict
+    print_gpu_usage(device)
+
+    model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Vessel ID")
+
     # remove small objects from vessel mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
+    vessel_mask_10x._source_data[:] = remove_small_objects(
+        vessel_mask_10x._source_data[:].astype(bool), min_size=3000
     )
 
     upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
@@ -381,7 +389,7 @@ def run_full_pipeline(
     upsample(vessel10xdilated, vessel40xdilated, upsampling_factor, s2_array, s0_array)
     #vessel_40x_dilated = open_ds(zarr_path / "mask" / "vessel40xdilated", mode="a")
     print("Saving Upsample")
-    vessel40xdilated.data = (
+    vessel40xdilated_multiplication = (
         vessel40xdilated.data
         * (1 - inflammation_mask.data)
         * (1 - dt_mask.data)
@@ -392,14 +400,14 @@ def run_full_pipeline(
         * (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
         * (fg_eroded_s0.data)
     )
-    vessel_store = dask.array.store(vessel40xdilated.data, vessel40xdilated._source_data, execute=False)
+    vessel_store = dask.array.store(vessel40xdilated_multiplication, vessel40xdilated._source_data, execute=False)
     dask.compute(vessel_store)
     print("Completed Saving Upsampling")
 
     ################################################
     print("Calculating Fibrosis Mask")
     # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
-    finfib_mask.data = (
+    finfib_multiplication = (
         (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
         * (1 - vessel_mask.data)
         * (1 - vessel40xdilated.data)
@@ -412,17 +420,21 @@ def run_full_pipeline(
     )
     print("Saving Fibrosis Mask")
     # execute multiplication
-    finfib_store = dask.array.store(finfib_mask.data, finfib_mask._source_data, compute=False)
+    finfib_store = dask.array.store(finfib_multiplication, finfib_mask._source_data, compute=False)
     # save blockwise
     dask.compute(finfib_store)
 
     print("Removing Small Fibrosis Objects")
     remove_small_fib(finfib_mask, s0_array)
 
+    #confused_roi = Roi((0, 10000000), (1000000, 1000000))
+    #count = finfib_mask[confused_roi].sum()
+    #assert count == 63238, count
+
     print("Completed Saving Fibrosis Mask")
     print("Calculating Collagen Overlay")
     # create final collagen overlay
-    fincollagen_mask.data = (
+    fincollagen_mask_multiplication = (
         (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
         * (1 - dt_mask.data)
         * (1 - pt_mask.data)
@@ -430,17 +442,17 @@ def run_full_pipeline(
         * (1 - vessel_mask.data)
         * fg_eroded_s0.data
     )
-    fincollagen_mask.data = fincollagen_mask.data >> 0
-    print("Saving Fibrosis Overlay")
+    fincollagen_mask_multiplication = fincollagen_mask_multiplication >> 0
+    print("Saving Structural Collagen Overlay")
     # execute multiplication
-    fincollagen_store = dask.array.store(fincollagen_mask.data, fincollagen_mask._source_data, compute=False)
+    fincollagen_store = dask.array.store(fincollagen_mask_multiplication, fincollagen_mask._source_data, compute=False)
     # store blockwise
     dask.compute(fincollagen_store)
 
-    print("Compeleted Saving Fibrosis Overlay")
+    print("Compeleted Saving Structural Collagen Overlay")
     print("Calculating Collagen Mask with Exclusion")
     # create final collagen exclusion overlay
-    fincollagen_exclusion_mask.data = (
+    fincollagen_exclusion_mask_multiplication = (
         (vessel40xdilated.data + tbm_mask.data + bc_mask.data)
         * (1 - dt_mask.data)
         * (1 - pt_mask.data)
@@ -451,14 +463,14 @@ def run_full_pipeline(
     
     print("Saving Collagen Mask with Exclusion")
     # execulte multiplication
-    fincollagen_exclusion_store = dask.array.store(fincollagen_exclusion_mask.data, fincollagen_exclusion_mask._source_data, compute=False)
+    fincollagen_exclusion_store = dask.array.store(fincollagen_exclusion_mask_multiplication, fincollagen_exclusion_mask._source_data, compute=False)
     # store blockwise
     dask.compute(fincollagen_exclusion_store)
     print("Completed Saving Collagen Mask with Exclusion")
 
     print("Calculating Inflammation Mask")
     # create final inflammation overlay
-    fininflamm_mask.data = (
+    fininflamm_mask_multiplication = (
         inflammation_mask.data
         * (1 - vessel_mask.data)
         * (1 - dt_mask.data)
@@ -469,46 +481,46 @@ def run_full_pipeline(
     )
     print("Saving Inflammation Mask")
     # execute multiplication
-    inflamm_store = dask.array.store(fininflamm_mask.data, fininflamm_mask._source_data, compute=False)
+    inflamm_store = dask.array.store(fininflamm_mask_multiplication, fininflamm_mask._source_data, compute=False)
     # store blockwise
     dask.compute(inflamm_store)
     print("Completed Saving Inflammation Mask")
 
     # apply edge tissue mask to remaining masks
     print("Applying Foreground Mask to Masks")
-    fincap_mask.data = fincap_mask.data * fg_eroded_s0.data
-    fincap_store = dask.array.store(fincap_mask.data, fincap_mask._source_data, execute=False)
+    fincap_mask_multiplication = fincap_mask.data * fg_eroded_s0.data
+    fincap_store = dask.array.store(fincap_mask_multiplication, fincap_mask._source_data, execute=False)
     dask.compute(fincap_store)
-    pt_mask.data = pt_mask.data * fg_eroded_s0.data
-    pt_store = dask.array.store(pt_mask.data, pt_mask._source_data, execute=False)
+    pt_mask_multiplication = pt_mask.data * fg_eroded_s0.data
+    pt_store = dask.array.store(pt_mask_multiplication, pt_mask._source_data, execute=False)
     dask.compute(pt_store)
-    dt_mask.data = dt_mask.data * fg_eroded_s0.data
-    dt_store = dask.array.store(dt_mask.data, dt_mask._source_data, execute=False)
+    dt_mask_multiplication = dt_mask.data * fg_eroded_s0.data
+    dt_store = dask.array.store(dt_mask_multiplication, dt_mask._source_data, execute=False)
     dask.compute(dt_store)
-    vessel_mask.data = vessel_mask.data * fg_eroded_s0.data
-    fin_vessel_store = dask.array.store(vessel_mask.data, vessel_mask._source_data, execute=False)
+    vessel_mask_multiplication = vessel_mask.data * fg_eroded_s0.data
+    fin_vessel_store = dask.array.store(vessel_mask_multiplication, vessel_mask._source_data, execute=False)
     dask.compute(fin_vessel_store)
 
     # calculate ROI fibrosis score & save to txt file
-    with open(Path(zarr_path.parent / "fibpx.txt"), "w") as f:
+    with open(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), "w") as f:
         f.writelines("# Fibrosis Pixels per Block \n")
-    with open(Path(zarr_path.parent / "tissuepx.txt"), "w") as f:
+    with open(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt"), "w") as f:
         f.writelines("# Tissue Pixels per Block \n")
-    with open(Path(zarr_path.parent / "inflammpx.txt"), "w") as f:
+    with open(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), "w") as f:
         f.writelines("# Inflammation Pixels per Block \n")
-    with open(Path(zarr_path.parent / "interstitiumpx.txt"), "w") as f:
+    with open(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt"), "w") as f:
         f.writelines("# Interstitium Pixels per Block \n")
 
     # blockwise mask multiplications
     print("Calculating Fibrosis Score")
-    calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, s0_array)
-    fibpx = np.loadtxt(Path(zarr_path.parent / "fibpx.txt"), comments="#", dtype=int)
-    tissuepx = np.loadtxt(Path(zarr_path.parent / "tissuepx.txt", comments="#", dtype=int))
+    calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, input_filename, s0_array)
+    fibpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), comments="#", dtype=int)
+    tissuepx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt", comments="#", dtype=int))
 
     print("Calculating Inflammation Score")
-    calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, s0_array)
-    inflammpx = np.loadtxt(Path(zarr_path.parent / "inflammpx.txt"), comments="#", dtype=int)
-    interstitiumpx = np.loadtxt(Path(zarr_path.parent / "interstitiumpx.txt", comments="#", dtype=int))
+    calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, input_filename, s0_array)
+    inflammpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), comments="#", dtype=int)
+    interstitiumpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt", comments="#", dtype=int))
 
     total_fibpx = np.sum(fibpx)
     total_inflammpx = np.sum(inflammpx)

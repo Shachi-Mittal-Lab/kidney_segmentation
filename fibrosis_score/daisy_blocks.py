@@ -23,6 +23,7 @@ from skimage.morphology import (
     disk,
 )
 from skimage.filters import gaussian
+from skimage.measure import label
 from pathlib import Path
 
 def model_prediction(
@@ -322,9 +323,9 @@ def remove_small_fib(
     def fibfilter_block(block: daisy.Block):
         # in data
         fib = finfib_mask[block.read_roi]
-
         # remove small fib sections
-        filtered_fib = remove_small_objects(fib.astype(bool), min_size=3000)
+        labeled = label(fib.astype(bool), connectivity=2)
+        filtered_fib = remove_small_objects(labeled, min_size=5000)
         finfib_mask[block.write_roi] = filtered_fib
 
 
@@ -346,6 +347,7 @@ def calculate_fibscore(
         vessel_mask: Array,
         fincap_mask: Array,
         zarr_path: Path,
+        input_filename: Path,
         s0_array: Array,
 ):
 # blockwise mask multiplications
@@ -362,9 +364,9 @@ def calculate_fibscore(
 
         # write to text file
         # create text file
-        with open(Path(zarr_path.parent / "fibpx.txt"), "a") as f:
+        with open(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), "a") as f:
             f.writelines(f"{fibpx} \n")
-        with open(Path(zarr_path.parent / "tissuepx.txt"), "a") as f:
+        with open(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt"), "a") as f:
             f.writelines(f"{fgpx} \n")
 
 
@@ -384,6 +386,7 @@ def calculate_inflammscore(
         fincollagen_exclusion_mask: Array,
         finfib_mask: Array,
         zarr_path: Path,
+        input_filename: Path,
         s0_array: Array,
 ):
 # blockwise mask multiplications
@@ -398,9 +401,9 @@ def calculate_inflammscore(
         interstitiumpx = np.count_nonzero(interstitium)
         # write to text file
         # create text file
-        with open(Path(zarr_path.parent / "inflammpx.txt"), "a") as f:
+        with open(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), "a") as f:
             f.writelines(f"{inflammpx} \n")
-        with open(Path(zarr_path.parent / "interstitiumpx.txt"), "a") as f:
+        with open(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt"), "a") as f:
             f.writelines(f"{interstitiumpx} \n")
 
     inflammscore_task = daisy.Task(
