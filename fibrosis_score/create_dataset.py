@@ -27,6 +27,14 @@ def collect_image_mask_pairs(root_path):
                 if mask_candidates:
                     pairs.append((im_file, mask_candidates[0]))
 
+            # Collect new-style files: *rand_roi*.tif
+            rachel_style_images = list(folder.glob('*_rand_roi.tif'))
+            for im_file in rachel_style_images:
+                base = im_file.stem.replace('_rand_roi', '')
+                mask_candidates = list(folder.glob(f'{base}_rand_roi_mask*.tif'))
+                if mask_candidates:
+                    pairs.append((im_file, mask_candidates[0]))
+
     return pairs
 
 def save_pairs(pairs, output_dir):
@@ -54,4 +62,4 @@ def process_and_split(root_path, train_ratio=0.9):
     save_pairs(val_pairs, validation_dir)
 
 if __name__ == "__main__":
-    process_and_split("/home/riware/Desktop/loose_files/glom_annotations/carter_glom_annotations_consolidated_formatted_triplesclerosed")
+    process_and_split("/home/riware/Desktop/mittal_lab/vessel_annotations/vessel_training_data_4.0_reviewed_25Sep2025_formatted")
