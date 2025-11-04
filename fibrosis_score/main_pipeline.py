@@ -84,9 +84,6 @@ def run_full_pipeline(
         device = torch.device("cpu")
     print(f"Using {device}")
 
-    # Eric edit:no pngs before it was created
-    #os.makedirs("/media/mrl/Data/pipeline_connection/pngs", exist_ok=True)
-
     ###########
     input_filename = input_path.stem
     input_file_ext = input_path.suffix
@@ -267,14 +264,12 @@ def run_full_pipeline(
     #### Use U-net to predict gloms ####
 
     # load glom model
-    # model = torch.load("model_dataset1_flips_eric.pt", weights_only=False) before
     print_gpu_usage(device)
-
     model = torch.load("model_unet_dataset11Aug2025_glom_LSDs_gaussianelastic_longer_350.pt", weights_only=False)
     binary_head = torch.load("binaryhead_unet_dataset11Aug2025_glom_LSDs_gaussianelastic_longer_350.pt", weights_only=False)
-    # predict
     print_gpu_usage(device)
 
+    # predict
     model_prediction_lsds(cap_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Cap ID")
 
     # remove small objects from cap mask
@@ -283,40 +278,41 @@ def run_full_pipeline(
     )
 
     cap_mask_10x._source_data[:] = remove_small_holes(
-        cap_mask_10x._source_data[:].astype(bool), area_threshold=3000
+        cap_mask_10x._source_data[:].astype(bool), area_threshold=5000
     )
 
     print("Predicting Tubules with U-Net")
-    #### Use U-net to predict pt ####
+    #### Use U-net to predict tubules ####
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
-
     # remove previous model from gpu
-    #del model 
+    del model 
     torch.cuda.empty_cache()
-
     # load model
+    print_gpu_usage(device)
     model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
     # predict
     model_prediction(tubule_mask_10x, s2_array, patch_size_final, model, device, "Tubule ID")
+    print_gpu_usage(device)
 
     print("Predicting Vessels with U-Net")
-
     #### Use U-net to predict vessel ####
-
     # remove previous model from gpu
     del model 
     # load model
-    model = torch.load("model_unet_dataset6_vessel0wscheduler_100.pt", weights_only=False)
+    print_gpu_usage(device)
+    model = torch.load("model_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
+    print_gpu_usage(device)
+
     # predict
-    model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
+    model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Vessel ID")
     # remove small objects from vessel mask
-    cap_mask_10x._source_data[:] = remove_small_objects(
-        cap_mask_10x._source_data[:].astype(bool), min_size=2000
+    vessel_mask_10x._source_data[:] = remove_small_objects(
+        vessel_mask_10x._source_data[:].astype(bool), min_size=2000
     )
 
-    upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
-
     # blockwise upsample from 10x to 40x
+    upsampling_factor = vessel_mask_10x.voxel_size / fincap_mask.voxel_size
     upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
     upsample(tubule_mask_10x, tubule_mask, upsampling_factor, s2_array, s0_array)
     upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
