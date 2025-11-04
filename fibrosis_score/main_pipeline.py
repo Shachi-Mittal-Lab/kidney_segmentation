@@ -84,7 +84,7 @@ def run_full_pipeline(
         device = torch.device("cpu")
     print(f"Using {device}")
 
-    ###########
+    # identify input file
     input_filename = input_path.stem
     input_file_ext = input_path.suffix
     print(input_filename)
@@ -191,7 +191,7 @@ def run_full_pipeline(
     fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask = (
         prepare_clustering_masks(zarr_path, s0_array)
     )
-
+    print("Preparing Masks for Segmentation")
     # prepare histological segmentation mask locations in zarr (10x)
     tubule_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
     # prepare histological segmentation mask locations in zarr (40x)
@@ -405,7 +405,7 @@ def run_full_pipeline(
     #assert count == 63238, count
 
     print("Completed Saving Fibrosis Mask")
-    print("Calculating Collagen Overlay")
+    print("Calculating Structural Collagen Overlay")
     # create final collagen overlay
     fincollagen_mask_multiplication = (
         (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
@@ -461,12 +461,9 @@ def run_full_pipeline(
     fincap_mask_multiplication = fincap_mask.data * fg_eroded_s0.data
     fincap_store = dask.array.store(fincap_mask_multiplication, fincap_mask._source_data, execute=False)
     dask.compute(fincap_store)
-    pt_mask_multiplication = pt_mask.data * fg_eroded_s0.data
-    pt_store = dask.array.store(pt_mask_multiplication, pt_mask._source_data, execute=False)
-    dask.compute(pt_store)
-    dt_mask_multiplication = dt_mask.data * fg_eroded_s0.data
-    dt_store = dask.array.store(dt_mask_multiplication, dt_mask._source_data, execute=False)
-    dask.compute(dt_store)
+    tubule_mask_multiplication = tubule_mask.data * fg_eroded_s0.data
+    tubule_store = dask.array.store(tubule_mask_multiplication, tubule_mask._source_data, execute=False)
+    dask.compute(tubule_store)
     vessel_mask_multiplication = vessel_mask.data * fg_eroded_s0.data
     fin_vessel_store = dask.array.store(vessel_mask_multiplication, vessel_mask._source_data, execute=False)
     dask.compute(fin_vessel_store)
