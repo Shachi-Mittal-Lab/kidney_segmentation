@@ -180,10 +180,10 @@ def unet_models_pred(
      # prepare histological segmentation mask locations in zarr (10x)
     pt_mask_10x, dt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
     # prepare histological segmentation mask locations in zarr (40x)
-    pt_mask, dt_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
+    pt_mask, dt_mask_10x, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
 
     # prepare postprocessing masks in zarr (40x)
-    tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fininflamm_mask = (
+    tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fincollagen_exclusion, fininflamm_mask = (
         prepare_postprocessing_masks(zarr_path, s0_array)
     )
     # prep mask for cap at 10x
@@ -201,9 +201,9 @@ def unet_models_pred(
             T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
         ]
     )
-    patch_shape_final = Coordinate(1472, 1472)
+    patch_shape_final = Coordinate(1056, 1056)
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
-
+    """
     print("Predicting Gloms with U-Net")
     #### Use U-net to predict gloms ####
 
@@ -222,9 +222,9 @@ def unet_models_pred(
     cap_mask_10x._source_data[:] = remove_small_objects(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
     )
-    """
-    print("Predicting proximal tubules with U-Net")
-    #### Use U-net to predict pt ####
+
+    print("Predicting tubules with U-Net")
+    #### Use U-net to predict tubules ####
 
     # remove previous model from gpu
     #del model 
@@ -234,44 +234,38 @@ def unet_models_pred(
     model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
     # predict
     model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
+    """
+    print("Predicting vessels with U-Net")
 
-    print("Predicting distal tubules with U-Net")
-
-    #### Use U-net to predict dt ####
-
-    # remove previous model from gpu
-    del model 
-    # load model
-    model = torch.load("model_unet_dataset6_dt3_200.pt", weights_only=False)
-    # predict
-    model_prediction(dt_mask_10x, s2_array, patch_size_final, model, device, "DT ID")
-
-    # assign pixels that were postive in both the pt and dt masks to pt for simplicity 
-    dt_mask_10x.data = dask.array.where((pt_mask_10x.data == 1) & (dt_mask_10x.data == 1), 0, dt_mask_10x.data)
-
-    #### Use U-net to predict dt ####
+    #### Use U-net to predict vessel ####
 
     # remove previous model from gpu
-    del model 
+    # del model 
     # load model
-    model = torch.load("model_dataset1_vessel0_400.pt", weights_only=False)
+    model = torch.load("model_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
     # predict
-    model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
+    print_gpu_usage(device)
+
+    model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Vessel ID")
+
+    # model = torch.load("model_unet_dataset10_vessel4evensmallerjitter_200.pt", weights_only=False)
+    # predict
+    # model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
     """
     # remove small objects from cap mask
     cap_mask_10x._source_data[:] = remove_small_objects(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
     )
-
+    """
     upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
-
+    """
     # blockwise upsample from 10x to 40x
     upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
-    """
     upsample(pt_mask_10x, pt_mask, upsampling_factor, s2_array, s0_array)
-    upsample(dt_mask_10x, dt_mask, upsampling_factor, s2_array, s0_array)
+    """
     upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
-
+    """
     # scale eroded foreground mask to 40x from 5x for final multiplications
     fg_eroded = open_ds(zarr_path / "mask" / "foreground_eroded")  # in s3
     upsampling_factor = fg_eroded.voxel_size / vessel_mask.voxel_size
