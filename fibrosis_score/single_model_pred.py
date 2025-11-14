@@ -178,9 +178,9 @@ def unet_models_pred(
 
     print("Preparing Masks")
      # prepare histological segmentation mask locations in zarr (10x)
-    pt_mask_10x, dt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
+    pt_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
     # prepare histological segmentation mask locations in zarr (40x)
-    pt_mask, dt_mask_10x, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
+    pt_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
 
     # prepare postprocessing masks in zarr (40x)
     tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fincollagen_exclusion, fininflamm_mask = (
@@ -222,7 +222,7 @@ def unet_models_pred(
     cap_mask_10x._source_data[:] = remove_small_objects(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
     )
-
+    """
     print("Predicting tubules with U-Net")
     #### Use U-net to predict tubules ####
 
@@ -231,10 +231,19 @@ def unet_models_pred(
     torch.cuda.empty_cache()
 
     # load model
-    model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
+    # model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
     # predict
-    model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
+    # model_prediction(pt_mask_10x, s2_array, patch_size_final, model, device, "PT ID")
+    model = torch.load("model_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
+    
+    # predict
+    print_gpu_usage(device)
+
+    model_prediction_lsds(pt_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Tubule ID")
+
     """
+
     print("Predicting vessels with U-Net")
 
     #### Use U-net to predict vessel ####
@@ -249,19 +258,17 @@ def unet_models_pred(
 
     model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Vessel ID")
 
-    # model = torch.load("model_unet_dataset10_vessel4evensmallerjitter_200.pt", weights_only=False)
-    # predict
-    # model_prediction(vessel_mask_10x, s2_array, patch_size_final, model, device, "Vessel ID")
-    """
     # remove small objects from cap mask
     cap_mask_10x._source_data[:] = remove_small_objects(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
     )
     """
     upsampling_factor = cap_mask_10x.voxel_size / fincap_mask.voxel_size
-    """
+
     # blockwise upsample from 10x to 40x
+    """
     upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
+    """
     upsample(pt_mask_10x, pt_mask, upsampling_factor, s2_array, s0_array)
     """
     upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
@@ -282,5 +289,5 @@ def unet_models_pred(
 
     # upsample tissue mask from 5x to 40x
     tissuemask_upsample(fg_eroded, fg_eroded_s0, s0_array, upsampling_factor)
-    """
+
     return

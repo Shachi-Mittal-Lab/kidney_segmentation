@@ -287,12 +287,13 @@ def run_full_pipeline(
     # remove previous model from gpu
     del model 
     torch.cuda.empty_cache()
-    # load model
+    # load mode
     print_gpu_usage(device)
-    model = torch.load("model_unet_dataset0_dtpt0_200.pt", weights_only=False)
+    model = torch.load("model_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
     # predict
-    model_prediction(tubule_mask_10x, s2_array, patch_size_final, model, device, "Tubule ID")
     print_gpu_usage(device)
+    model_prediction_lsds(tubule_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Tubule ID")
 
     print("Predicting Vessels with U-Net")
     #### Use U-net to predict vessel ####
