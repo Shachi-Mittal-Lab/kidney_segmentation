@@ -1,3 +1,61 @@
+# region selection for final retrainings
+# img = readsvs(svs_path, 0, (8000,18000), (3000, 3000)) # 21-2000 A-1-9 Trich - 2021-03-22 12.17.30.ndpi region 2_0 
+# img = readsvs(svs_path, 0, (6000,2500), (3000, 3000)) # 21-2000 A-1-9 Trich - 2021-03-22 12.17.30.ndpi region 2_1
+# img = readsvs(svs_path, 0, (3000, 22000), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_0 
+# img = readsvs(svs_path, 0, (31500, 5750), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_1
+# img = readsvs(svs_path, 0, (36000, 10500), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_2
+# img = readsvs(svs_path, 0, (35000, 14500), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_3
+# img = readsvs(svs_path, 0, (32000, 20000), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_4
+# img = readsvs(svs_path, 0, (30000, 24000), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_5
+# img = readsvs(svs_path, 0, (27000, 32500), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_6
+# img = readsvs(svs_path, 0, (26000, 35500), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_7
+# img = readsvs(svs_path, 0, (23000, 43500), (3000, 3000)) # 21-2001 A-1-9 Trich - 2021-03-22 13.05.09.ndpi region 2_8
+# img = readsvs(svs_path, 0, (45000, 6500), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_0
+# img = readsvs(svs_path, 0, (7000, 47000), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_1
+# img = readsvs(svs_path, 0, (5000, 49000), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_2
+# img = readsvs(svs_path, 0, (2000, 51000), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_3
+# img = readsvs(svs_path, 0, (35000, 24500), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_4
+# img = readsvs(svs_path, 0, (30000, 27500), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_5
+# img = readsvs(svs_path, 0, (40000, 31000), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_6
+# img = readsvs(svs_path, 0, (28000, 45000), (3000, 3000)) # 21-2002 A-1-9 Trich - 2021-03-22 12.36.47.ndpi region 2_7
+# img = readsvs(svs_path, 0, (8000, 16000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_0
+# img = readsvs(svs_path, 0, (6000, 30000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_1
+# img = readsvs(svs_path, 0, (23500, 38000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_2
+# img = readsvs(svs_path, 0, (26000, 21000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_3
+# img = readsvs(svs_path, 0, (27000, 13000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_4
+# img = readsvs(svs_path, 0, (26000, 25000), (3000, 3000)) # 21-2003 A-1-9 Trich - 2021-03-22 12.46.43.ndpi region 2_5
+# img = readsvs(svs_path, 0, (32000, 2000), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_0
+# img = readsvimg = readsvs(svs_path, 0, (19000, 2000), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_1
+# img = readsvimg = readsvs(svs_path, 0, (48000, 2500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_2
+# img = readsvimg = readsvs(svs_path, 0, (49000, 10000), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_3
+# img = readsvimg = readsvs(svs_path, 0, (54000, 9000), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_4
+# img = readsvimg = readsvs(svs_path, 0, (27000, 13500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_5
+# img = readsvimg = readsvs(svs_path, 0, (22000, 20500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_6
+# img = readsvimg = readsvs(svs_path, 0, (36000, 33500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_7
+# img = readsvimg = readsvs(svs_path, 0, (44000, 33500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_8
+# img = readsvimg = readsvs(svs_path, 0, (46500, 34500), (3000, 3000)) # 21-2006 A-1-9 Trich - 2021-03-22 13.21.21.ndpi region 2_9
+# img = readsvimg = readsvs(svs_path, 0, (45000, 11500), (3000, 3000)) # 21-2007 A-1-9 Trich - 2021-03-22 13.34.30.ndpi region 2_0
+# img = readsvimg = readsvs(svs_path, 0, (39000, 10000), (3000, 3000)) # 21-2007 A-1-9 Trich - 2021-03-22 13.34.30.ndpi region 2_1
+# img = readsvimg = readsvs(svs_path, 0, (48500, 33000), (3000, 3000)) # 21-2007 A-1-9 Trich - 2021-03-22 13.34.30.ndpi region 2_2
+# img = readsvimg = readsvs(svs_path, 0, (51500, 34000), (3000, 3000)) # 21-2007 A-1-9 Trich - 2021-03-22 13.34.30.ndpi region 2_3
+# img = readsvimg = readsvs(svs_path, 0, (63500, 36000), (3000, 3000)) # 21-2007 A-1-9 Trich - 2021-03-22 13.34.30.ndpi region 2_4
+# img = readsvimg = readsvs(svs_path, 0, (12000, 18000), (3000, 3000)) # 21-2008 A-1-9 Trich - 2021-03-22 13.47.31.ndpi region 2_0
+# img = readsvimg = readsvs(svs_path, 0, (5000, 36000), (3000, 3000)) # 21-2008 A-1-9 Trich - 2021-03-22 13.47.31.ndpi region 2_1
+# img = readsvimg = readsvs(svs_path, 0, (33500, 50500), (3000, 3000)) # 21-2008 A-1-9 Trich - 2021-03-22 13.47.31.ndpi region 2_2
+# img = readsvimg = readsvs(svs_path, 0, (57500, 12000), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_0
+# img = readsvimg = readsvs(svs_path, 0, (52500, 20000), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_1
+# img = readsvimg = readsvs(svs_path, 0, (49000, 19000), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_2
+# img = readsvimg = readsvs(svs_path, 0, (46000, 18500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_3
+# img = readsvimg = readsvs(svs_path, 0, (40000, 16500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_4
+# img = readsvimg = readsvs(svs_path, 0, (34000, 15500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_5
+# img = readsvimg = readsvs(svs_path, 0, (35000, 31500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_6
+# img = readsvimg = readsvs(svs_path, 0, (42000, 32500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_7
+# img = readsvimg = readsvs(svs_path, 0, (49000, 32500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_8
+# img = readsvimg = readsvs(svs_path, 0, (52000, 32500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_9
+# img = readsvimg = readsvs(svs_path, 0, (71000, 33500), (3000, 3000)) # 21-2009 A-1-9 Trich - 2021-03-22 14.01.24.ndpi region 2_10
+# img = readsvimg = readsvs(svs_path, 0, (11500, 25500), (3000, 3000)) # 21-2010 A-1-9 Trich - 2021-03-22 15.31.52.ndpi region 2_0
+# img = readsvimg = readsvs(svs_path, 0, (45000, 52500), (3000, 3000)) # 21-2010 A-1-9 Trich - 2021-03-22 15.31.52.ndpi region 2_1
+
 # region selection for glom training 
 # img = readsvs(svs_path, 0, (18500,14000), (3000, 3000)) # 35e623b2-c9e8-4098-85fb-1489d04fc41d_S-2006-003982_TRI_2of2.svs region 0 
 # img = readsvs(svs_path, 0, (19500,19000), (3000, 3000)) # 35e623b2-c9e8-4098-85fb-1489d04fc41d_S-2006-003982_TRI_2of2.svs region 1 
