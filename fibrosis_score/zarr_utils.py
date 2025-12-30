@@ -15,7 +15,9 @@ from dask.diagnostics import ProgressBar
 
 def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
     # open highest pyramid level
+    print("Opening NDPI")
     dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
+    print("NDPI Opened")
     s0_shape = dask_array0.shape
     units = ("nm", "nm")
     # grab resolution in cm, convert to nm, calculate for each pyramid level
@@ -32,11 +34,12 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
         dtype=np.uint8,
     )
     # storage info
-    store_rgb = zarr.open(zarr_path / "raw" / "s0")
     dask_array = dask_array0.rechunk(raw.data.chunksize)
-
+    store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
+    
+    print("Rechunking & Saving")
     with ProgressBar():
-        dask.array.store(dask_array, store_rgb)
+        dask.compute(store_raw)
 
     for i in range(1, 4):
         # open the ndpi with openslide for info and tifffile as zarr
@@ -63,11 +66,13 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
                     dtype=np.uint8,
                 )
                 # storage info
-                store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
+                print("Rechunking")
                 dask_array = dask_array.rechunk(raw.data.chunksize)
-
+                print("Saving")
+                store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
                 with ProgressBar():
-                    dask.array.store(dask_array, store_rgb)
+                    dask.compute(store_raw)
+
         
             else:
                 voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
@@ -83,16 +88,18 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
                     dtype=np.uint8,
                 )
                 # storage info
-                store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
                 prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
                 print(f"chunk shape: {prev_layer.chunk_shape}")
 
                 # mean downsampling
+                print("Downsampling Previous Layer")
                 dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
 
                 # save to zarr
+                print("Saving")
+                store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
                 with ProgressBar():
-                    dask.array.store(dask_array, store_rgb)
+                    dask.compute(store_raw)
 
         except TypeError:
             print(f"Layer {i} does not exist.  Generating")
@@ -120,8 +127,9 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
             # mean downsampling
             dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
             # save to zarr
+            store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
             with ProgressBar():
-                dask.array.store(dask_array, store_rgb)
+                dask.compute(store_raw)
     return print("npdi conversion complete")
 
 

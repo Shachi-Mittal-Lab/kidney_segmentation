@@ -105,6 +105,8 @@ def run_full_pipeline(
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
 
+    quit()
+
     print("Generating Foreground Masks")
     fmask, filled_fmask, eroded_fmask = prepare_foreground_masks(zarr_path, s3_array)
     mask = foreground_mask(s3_array.data, threshold)
@@ -207,7 +209,6 @@ def run_full_pipeline(
     txt_path = input_path.with_suffix(".txt")
     with open(txt_path, "w") as f:
         f.writelines("ROI fibrosis scores \n")
-        f.close()
 
     print("Clustering")
     for offset in tqdm(offsets_final):
@@ -478,16 +479,12 @@ def run_full_pipeline(
     # calculate ROI fibrosis score & save to txt file
     with open(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), "w") as f:
         f.writelines("# Fibrosis Pixels per Block \n")
-        f.close()
     with open(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt"), "w") as f:
         f.writelines("# Tissue Pixels per Block \n")
-        f.close()
     with open(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), "w") as f:
         f.writelines("# Inflammation Pixels per Block \n")
-        f.close()
     with open(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt"), "w") as f:
         f.writelines("# Interstitium Pixels per Block \n")
-        f.close()
 
     # blockwise mask multiplications
     print("Calculating Fibrosis Score")
@@ -512,6 +509,5 @@ def run_full_pipeline(
 
     with open(txt_path, "a") as f:
         f.writelines(f"Final Fibscore: {total_fibscore} \nFinal Inflammscore: {total_inflammscore}")
-        f.close()
         
     return
