@@ -470,6 +470,7 @@ def clean_visualization(
         # if pixels are positive in tubule & vessels
         # remove positive pixels in vessel mask
         vessel_mask[block.write_roi] = vessels * (1 - tubules)
+        vessels = vessel_mask[block.read_roi]
 
         # if pixels are positive in capsule & vessels
         # remove positive pixels in vessel mask
