@@ -57,8 +57,9 @@ def prepare_foreground_masks(zarr_path, ref_array):
     fmask = prepare_mask(zarr_path, ref_array, "foreground")
     filled_fmask = prepare_mask(zarr_path, ref_array, "foreground_filled")
     eroded_fmask = prepare_mask(zarr_path, ref_array, "foreground_eroded")
+    abnormaltissue_mask = prepare_mask(zarr_path, ref_array, "abnormaltissue")
 
-    return fmask, filled_fmask, eroded_fmask
+    return fmask, filled_fmask, eroded_fmask, abnormaltissue_mask
 
 
 def prepare_clustering_masks(zarr_path, ref_array):

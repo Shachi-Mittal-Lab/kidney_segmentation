@@ -1,7 +1,7 @@
 import subprocess
 
 # ---- CONFIGURATION ----
-zarr_file = "/media/mrl/Data/pipeline_connection/ndpis/full_pipeline_preds_14Nov2025/BR21-2024-A-1-9-TRI - 2022-08-10 23.46.06.zarr"  # Change this to your Zarr file name
+zarr_file = "/media/mrl/Data/pipeline_connection/ndpis/testing_new_full_pipeline_07Jan2025/BR21-2050-A-1-9-TRI - 2022-08-10 23.52.57.zarr"  # Change this to your Zarr file name
 
 # List of datasets to visualize
 datasets = [
@@ -11,7 +11,9 @@ datasets = [
     "mask/tubule_40x",
     "mask/fininflamm",
     "mask/fincollagen_exclusion",
-    "mask/finfib"
+    "mask/finfib",
+    "mask/abnormaltissue",
+    "mask/foreground_eroded"
 ]
 
 # ---- BUILD COMMAND ----
