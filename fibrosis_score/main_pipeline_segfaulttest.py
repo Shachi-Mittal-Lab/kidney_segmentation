@@ -23,8 +23,6 @@ from fibrosis_score.daisy_blocks import (
     id_tbm,
     id_bc,
     downsample_vessel,
-    downsample_fibrosis,
-    clean_visualization,
     calculate_fibscore,
     calculate_inflammscore,
     remove_small_fib,
@@ -62,8 +60,7 @@ from skimage.morphology import (
     remove_small_holes,
 )
 from skimage.filters import gaussian
-from skimage.measure import label
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import label
 
 import torch
 import torchvision.transforms as T
@@ -108,8 +105,10 @@ def run_full_pipeline(
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
 
+    quit()
+
     print("Generating Foreground Masks")
-    fmask, filled_fmask, eroded_fmask, abnormaltissue_mask = prepare_foreground_masks(zarr_path, s3_array)
+    fmask, filled_fmask, eroded_fmask = prepare_foreground_masks(zarr_path, s3_array)
     mask = foreground_mask(s3_array.data, threshold)
     store_fgbg = zarr.open(zarr_path / "mask" / "foreground")
     dask.array.store(mask, store_fgbg)
@@ -210,7 +209,6 @@ def run_full_pipeline(
     txt_path = input_path.with_suffix(".txt")
     with open(txt_path, "w") as f:
         f.writelines("ROI fibrosis scores \n")
-        f.close()
 
     print("Clustering")
     for offset in tqdm(offsets_final):
@@ -269,8 +267,8 @@ def run_full_pipeline(
 
     # load glom model
     print_gpu_usage(device)
-    model = torch.load("model_unet_dataset5_01Jan2026_glom0_LSDs_final.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_dataset5_01Jan2026_glom0_LSDs_final.pt", weights_only=False)
+    model = torch.load("model_unet_dataset11Aug2025_glom_LSDs_gaussianelastic_longer_350.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset11Aug2025_glom_LSDs_gaussianelastic_longer_350.pt", weights_only=False)
     print_gpu_usage(device)
 
     # predict
@@ -293,8 +291,8 @@ def run_full_pipeline(
     torch.cuda.empty_cache()
     # load mode
     print_gpu_usage(device)
-    model = torch.load("model_unet_dataset3_tubule0_LSDs_400.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_dataset3_tubule0_LSDs_400.pt", weights_only=False)
+    model = torch.load("model_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
     # predict
     print_gpu_usage(device)
     model_prediction_lsds(tubule_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Tubule ID")
@@ -306,8 +304,8 @@ def run_full_pipeline(
     torch.cuda.empty_cache()
     # load model
     print_gpu_usage(device)
-    model = torch.load("model_unet_dataset12_vessel0_LSDs_final.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_dataset12_vessel0_LSDs_final.pt", weights_only=False)
+    model = torch.load("model_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_dataset11_vessel0_LSDs_400.pt", weights_only=False)
     print_gpu_usage(device)
 
     # predict
@@ -343,9 +341,6 @@ def run_full_pipeline(
 
     # upsample tissue mask from 5x to 40x
     tissuemask_upsample(fg_eroded, fg_eroded_s0, s0_array, upsampling_factor)
-
-    # Remove overlaps in masks 
-    clean_visualization(vessel_mask, fincap_mask, tubule_mask, s0_array)
 
     print("Identifying TBM")
     # need to erode and dilate to generate a TBM class
@@ -418,21 +413,6 @@ def run_full_pipeline(
     #assert count == 63238, count
 
     print("Completed Saving Fibrosis Mask")
-
-    print("Generatinging Abnormal Tissue Mask")  # ABNORMAL VS NORMAL TISSUE WILL BE CALCULATED IN THE 5X
-    # downsample fibrosis mask for abnormal tissue visualization
-    downsample_fibrosis(finfib_mask, abnormaltissue_mask)
-    # remove small objects from downsampled fibrosis mask
-    labeled = label(abnormaltissue_mask.data.astype(bool), connectivity=2)
-    filtered_fib = remove_small_objects(labeled, min_size=2000)
-    # apply Gaussian blur to visualize abnormal tissue mask
-    abnormaltissue = gaussian_filter(filtered_fib, sigma = 41.0, truncate = 4.0) > 0.01
-    abnormaltissue = abnormaltissue.astype(bool)
-    dask_abnormaltissue = dask.array.from_array(abnormaltissue)
-    # apply 5x foreground mask to abnormal tissue mask
-    dask_abnormaltissue = dask_abnormaltissue * fg_eroded.data
-    dask.array.store(dask_abnormaltissue, abnormaltissue_mask._source_data, compute=True)
-   
     print("Calculating Structural Collagen Overlay")
     # create final collagen overlay
     fincollagen_mask_multiplication = (
@@ -499,53 +479,35 @@ def run_full_pipeline(
     # calculate ROI fibrosis score & save to txt file
     with open(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), "w") as f:
         f.writelines("# Fibrosis Pixels per Block \n")
-        f.close()
     with open(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt"), "w") as f:
         f.writelines("# Tissue Pixels per Block \n")
-    with open(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt"), "w") as f:
-        f.writelines("# Tissue without Capsules or Vessels Pixels per Block \n")
     with open(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), "w") as f:
         f.writelines("# Inflammation Pixels per Block \n")
-        f.close()
     with open(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt"), "w") as f:
         f.writelines("# Interstitium Pixels per Block \n")
-        f.close()
 
-    # Calculate fibrosis score at 40x
+    # blockwise mask multiplications
     print("Calculating Fibrosis Score")
     calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, input_filename, s0_array)
     fibpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), comments="#", dtype=int)
-    tissuenoglomvesselpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt", comments="#", dtype=int))
     tissuepx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt", comments="#", dtype=int))
 
     print("Calculating Inflammation Score")
     calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, input_filename, s0_array)
     inflammpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), comments="#", dtype=int)
     interstitiumpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt", comments="#", dtype=int))
-    
-    print("Finalizing Fibrosis Scores")
+
     total_fibpx = np.sum(fibpx)
     total_inflammpx = np.sum(inflammpx)
     total_tissuepx = np.sum(tissuepx)
-    total_tissuenoglomvesselpx = np.sum(tissuenoglomvesselpx)
     total_interstitiumpx = np.sum(interstitiumpx)
-    total_drsetty_fibscore = (total_fibpx / total_tissuenoglomvesselpx) * 100
-    total_alpers1_fibscore = (total_fibpx / total_tissuepx) * 100
+    total_fibscore = (total_fibpx / total_tissuepx) * 100
     total_inflammscore = (total_inflammpx / total_interstitiumpx) * 100 
-
-    # calculate fibrosis score with abnormal tissue in 5x
-    abnormaltissuepx = dask.array.count_nonzero(abnormaltissue_mask.data)
-    tissuepx_5x = dask.array.count_nonzero(fg_eroded.data)
-    total_alpers2_fibscore = abnormaltissuepx / tissuepx_5x * 100
-
 
     print("Fibrosis Score Calculated")
     print("Inflammation Score Calculated")
 
     with open(txt_path, "a") as f:
-        f.write(f"Final Dr. Setty Fibscore: {total_drsetty_fibscore}\n")
-        f.write(f"Final Alpers 1 Score: {total_alpers1_fibscore}\n")
-        f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore.compute()}\n")
-        f.write(f"Final Inflammscore: {total_inflammscore}\n")
-              
+        f.writelines(f"Final Fibscore: {total_fibscore} \nFinal Inflammscore: {total_inflammscore}")
+        
     return
