@@ -107,6 +107,7 @@ def run_full_pipeline(
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
+    s0_array = open_ds(zarr_path / "raw" / "s0")
 
     print("Generating Foreground Masks")
     fmask, filled_fmask, eroded_fmask, abnormaltissue_mask = prepare_foreground_masks(zarr_path, s3_array)
@@ -156,6 +157,16 @@ def run_full_pipeline(
     icmask = prepare_mask(zarr_path, s3_array, "integral_cortex")
     icmask._source_data[:] = integral_cortex_mask
 
+    # create eroded foreground mask in 40x to apply to segmentations
+    # and use as denominator in fibrosis calculations
+    eroded_cortex_mask_5x = prepare_mask(zarr_path, s3_array, "eroded_cortex_5x")
+    eroded_cortex_mask_40x = prepare_mask(zarr_path, s0_array, "eroded_cortex_40x")
+    cortex_erosion_multiplication = eroded_fmask.data * pred_mask.data
+    eroded_cortex_5x = dask.array.store(cortex_erosion_multiplication, eroded_cortex_mask_5x._source_data, execute=False)
+    dask.compute(eroded_cortex_5x)
+    upsampling_factor = eroded_cortex_mask_5x.voxel_size / eroded_cortex_mask_40x.voxel_size
+    upsample(eroded_cortex_mask_5x, eroded_cortex_mask_40x, upsampling_factor, s3_array, s0_array)
+
     # create patch mask for Omni-Seg
     patch_shape_final = Coordinate(512, 512)  # Will convention: shape in voxels
 
@@ -185,9 +196,6 @@ def run_full_pipeline(
 
     # get cluster centers
     clustering, n_clusters = prepare_clustering(gray_cluster_centers)
-
-    # grab 40x level
-    s0_array = open_ds(zarr_path / "raw" / "s0")
 
     print("Preparing Masks for Clustering")
     # prepare clustering mask locations in zarr (40x)
@@ -316,7 +324,6 @@ def run_full_pipeline(
     vessel_mask_10x._source_data[:] = remove_small_objects(
         vessel_mask_10x._source_data[:].astype(bool), min_size=2000
     )
-    
     # remove previous model from gpu
     del model 
     torch.cuda.empty_cache()
@@ -385,7 +392,7 @@ def run_full_pipeline(
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
         * (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
-        * (fg_eroded_s0.data)
+        * (eroded_cortex_mask_40x.data)
     )
     vessel_store = dask.array.store(vessel40xdilated_multiplication, vessel40xdilated._source_data, execute=False)
     dask.compute(vessel_store)
@@ -402,7 +409,7 @@ def run_full_pipeline(
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
-        * fg_eroded_s0.data
+        * eroded_cortex_mask_40x.data
     )
     print("Saving Fibrosis Mask")
     # execute multiplication
@@ -411,7 +418,8 @@ def run_full_pipeline(
     dask.compute(finfib_store)
 
     print("Removing Small Fibrosis Objects")
-    remove_small_fib(finfib_mask, s0_array)
+    smallfib_mask = prepare_mask(zarr_path, s0_array, "smallfib")
+    remove_small_fib(finfib_mask, s0_array, smallfib_mask)
 
     #confused_roi = Roi((0, 10000000), (1000000, 1000000))
     #count = finfib_mask[confused_roi].sum()
@@ -430,7 +438,7 @@ def run_full_pipeline(
     abnormaltissue = abnormaltissue.astype(bool)
     dask_abnormaltissue = dask.array.from_array(abnormaltissue)
     # apply 5x foreground mask to abnormal tissue mask
-    dask_abnormaltissue = dask_abnormaltissue * fg_eroded.data
+    dask_abnormaltissue = dask_abnormaltissue * eroded_cortex_mask_5x.data
     dask.array.store(dask_abnormaltissue, abnormaltissue_mask._source_data, compute=True)
    
     print("Calculating Structural Collagen Overlay")
@@ -440,7 +448,7 @@ def run_full_pipeline(
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
-        * fg_eroded_s0.data
+        * eroded_cortex_mask_40x.data
     )
     fincollagen_mask_multiplication = fincollagen_mask_multiplication >> 0
     print("Saving Structural Collagen Overlay")
@@ -457,7 +465,7 @@ def run_full_pipeline(
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
-        * fg_eroded_s0.data
+        * eroded_cortex_mask_40x.data
     )
     
     print("Saving Collagen Mask with Exclusion")
@@ -475,7 +483,7 @@ def run_full_pipeline(
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
-        * fg_eroded_s0.data
+        * eroded_cortex_mask_40x.data
     )
     print("Saving Inflammation Mask")
     # execute multiplication
@@ -484,15 +492,15 @@ def run_full_pipeline(
     dask.compute(inflamm_store)
     print("Completed Saving Inflammation Mask")
 
-    # apply edge tissue mask to remaining masks
-    print("Applying Foreground Mask to Masks")
-    fincap_mask_multiplication = fincap_mask.data * fg_eroded_s0.data
+    # apply edge tissue & cortex mask to remaining masks
+    print("Applying Foreground Cortex Mask to Masks")
+    fincap_mask_multiplication = fincap_mask.data * eroded_cortex_mask_40x.data
     fincap_store = dask.array.store(fincap_mask_multiplication, fincap_mask._source_data, execute=False)
     dask.compute(fincap_store)
-    tubule_mask_multiplication = tubule_mask.data * fg_eroded_s0.data
+    tubule_mask_multiplication = tubule_mask.data * eroded_cortex_mask_40x.data
     tubule_store = dask.array.store(tubule_mask_multiplication, tubule_mask._source_data, execute=False)
     dask.compute(tubule_store)
-    vessel_mask_multiplication = vessel_mask.data * fg_eroded_s0.data
+    vessel_mask_multiplication = vessel_mask.data * eroded_cortex_mask_40x.data
     fin_vessel_store = dask.array.store(vessel_mask_multiplication, vessel_mask._source_data, execute=False)
     dask.compute(fin_vessel_store)
 
@@ -513,7 +521,7 @@ def run_full_pipeline(
 
     # Calculate fibrosis score at 40x
     print("Calculating Fibrosis Score")
-    calculate_fibscore(finfib_mask, fg_eroded_s0, vessel_mask, fincap_mask, zarr_path, input_filename, s0_array)
+    calculate_fibscore(finfib_mask, eroded_cortex_mask_40x, vessel_mask, fincap_mask, zarr_path, input_filename, s0_array)
     fibpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), comments="#", dtype=int)
     tissuenoglomvesselpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt", comments="#", dtype=int))
     tissuepx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt", comments="#", dtype=int))
@@ -530,13 +538,15 @@ def run_full_pipeline(
     total_tissuenoglomvesselpx = np.sum(tissuenoglomvesselpx)
     total_interstitiumpx = np.sum(interstitiumpx)
     total_drsetty_fibscore = (total_fibpx / total_tissuenoglomvesselpx) * 100
+    total_drsetty_fibscore_winflamm = ((total_fibpx + total_inflammpx) / total_tissuenoglomvesselpx) * 100
     total_alpers1_fibscore = (total_fibpx / total_tissuepx) * 100
+    total_alpers1_fibscore_winflamm = (total_fibpx / total_tissuepx) * 100
     total_inflammscore = (total_inflammpx / total_interstitiumpx) * 100 
 
     # calculate fibrosis score with abnormal tissue in 5x
     abnormaltissuepx = dask.array.count_nonzero(abnormaltissue_mask.data)
-    tissuepx_5x = dask.array.count_nonzero(fg_eroded.data)
-    total_alpers2_fibscore = abnormaltissuepx / tissuepx_5x * 100
+    tissuepx_5x = dask.array.count_nonzero(eroded_cortex_mask_5x.data)
+    total_alpers2_fibscore = abnormaltissuepx.compute() / tissuepx_5x.compute() * 100
 
 
     print("Fibrosis Score Calculated")
@@ -544,8 +554,10 @@ def run_full_pipeline(
 
     with open(txt_path, "a") as f:
         f.write(f"Final Dr. Setty Fibscore: {total_drsetty_fibscore}\n")
+        f.write(f"Final Dr. Setty Fibscore with Inflammation Included: {total_drsetty_fibscore}\n")
         f.write(f"Final Alpers 1 Score: {total_alpers1_fibscore}\n")
+        f.write(f"Final Alpers 1 Score with Inflammation Included: {total_alpers1_fibscore_winflamm}\n")
         f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore.compute()}\n")
         f.write(f"Final Inflammscore: {total_inflammscore}\n")
-              
+        f.close()
     return

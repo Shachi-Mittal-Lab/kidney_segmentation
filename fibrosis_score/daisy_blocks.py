@@ -348,6 +348,7 @@ def downsample_fibrosis(
 def remove_small_fib(
         finfib_mask: Array,
         s0_array: Array,
+        smallfib_mask: Array,
 ):
 # blockwise mask multiplications
     def fibfilter_block(block: daisy.Block):
@@ -356,7 +357,9 @@ def remove_small_fib(
         # remove small fib sections
         labeled = label(fib.astype(bool), connectivity=2)
         filtered_fib = remove_small_objects(labeled, min_size=5000)
-        finfib_mask[block.write_roi] = filtered_fib
+        removed_areas = labeled.astype(bool) * (1-filtered_fib.astype(bool))
+        smallfib_mask[block.write_roi] = removed_areas
+        finfib_mask[block.write_roi] = filtered_fib.astype(bool)
 
 
     fibfilter_task = daisy.Task(
@@ -373,7 +376,7 @@ def remove_small_fib(
 
 def calculate_fibscore(
         finfib_mask: Array,
-        fg_eroded_s0: Array,
+        cortex_eroded: Array,
         vessel_mask: Array,
         fincap_mask: Array,
         zarr_path: Path,
@@ -384,7 +387,7 @@ def calculate_fibscore(
     def fibscore_block(block: daisy.Block):
         # in data
         fib = finfib_mask[block.read_roi]
-        fg_er = fg_eroded_s0[block.read_roi]
+        fg_er = cortex_eroded[block.read_roi]
         vessel = vessel_mask[block.read_roi]
         cap = fincap_mask[block.read_roi]
         # calc positive pixels in mask
