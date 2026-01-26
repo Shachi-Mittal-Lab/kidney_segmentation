@@ -103,6 +103,7 @@ def run_full_pipeline(
     else:
         print(f"File must be of format .ndpi or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
+    return
     
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
@@ -540,7 +541,7 @@ def run_full_pipeline(
     total_drsetty_fibscore = (total_fibpx / total_tissuenoglomvesselpx) * 100
     total_drsetty_fibscore_winflamm = ((total_fibpx + total_inflammpx) / total_tissuenoglomvesselpx) * 100
     total_alpers1_fibscore = (total_fibpx / total_tissuepx) * 100
-    total_alpers1_fibscore_winflamm = (total_fibpx / total_tissuepx) * 100
+    total_alpers1_fibscore_winflamm = ((total_fibpx + total_inflammpx) / total_tissuepx) * 100
     total_inflammscore = (total_inflammpx / total_interstitiumpx) * 100 
 
     # calculate fibrosis score with abnormal tissue in 5x
@@ -554,10 +555,10 @@ def run_full_pipeline(
 
     with open(txt_path, "a") as f:
         f.write(f"Final Dr. Setty Fibscore: {total_drsetty_fibscore}\n")
-        f.write(f"Final Dr. Setty Fibscore with Inflammation Included: {total_drsetty_fibscore}\n")
+        f.write(f"Final Dr. Setty Fibscore with Inflammation Included: {total_drsetty_fibscore_winflamm}\n")
         f.write(f"Final Alpers 1 Score: {total_alpers1_fibscore}\n")
         f.write(f"Final Alpers 1 Score with Inflammation Included: {total_alpers1_fibscore_winflamm}\n")
-        f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore.compute()}\n")
-        f.write(f"Final Inflammscore: {total_inflammscore}\n")
+        f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore}\n")
+        f.write(f"Final Infl    ammscore: {total_inflammscore}\n")
         f.close()
     return
