@@ -10,14 +10,12 @@ import dask
 from dask.diagnostics import ProgressBar
 from dask.array import coarsen, mean
 
-
-
 # inputs #
-zarr = Path("/media/mrl/Data/pipeline_connection/ndpis/ci_0_nofilter/21-2009 A-1-9 Trich - 2021-03-22 14.01.24.zarr")
-tiff_5x = Path("/media/mrl/Data/pipeline_connection/ndpis/ci_0_nofilter/21-2009 A-1-9 Trich - 2021-03-22 14.01.24_mask.tiff")
+zarr = Path("/home/riware/Desktop/mittal_lab/file_conversions/21-2013 A-1-9 Trich - 2021-03-22 15.05.44.zarr")
+tiff_5x = zarr.parent / f"{zarr.stem}_mask.tiff"
+desired_tissue_zarr = zarr.parent / f"{zarr.stem}_desiredtissue.zarr"
 mask_5x = "desired_tissue_5x"
 mask_40x = "desired_tissue_40x"
-mask_applied_zarr = Path("/media/mrl/Data/pipeline_connection/ndpis/ci_0_nofilter/21-2009 A-1-9 Trich - 2021-03-22 14.01.24_desiredtisssue.zarr")
 
 # Grab Zarr 
 zarr_s0 = zarr / "raw" / "s0"
@@ -75,7 +73,7 @@ tissuemask_upsample(mask_5x_array, mask_40x_array, s0_array, upsampling_factor)
 # format new zarr
 units = ("nm", "nm")
 desired_tissue = prepare_ds(
-        mask_applied_zarr / "raw" / "s0",
+        desired_tissue_zarr / "raw" / "s0",
         s0_array.shape,
         s0_array.offset,
         s0_array.voxel_size,
@@ -86,12 +84,12 @@ desired_tissue = prepare_ds(
     )
 desired_tissue._source_data[:] = 0
 
-# save image of just fibrosis class 
+# Apply mask and save 
 mask_40x_array_expanded = mask_40x_array.data[:,:,None]
 print("Broadcasting mask")
 mask_broadcasted = dask.array.broadcast_to(mask_40x_array_expanded, s0_array.shape)
 print("Multiplying Image with Mask")
-multiplication = mask_40x_array_expanded * s0_array.data
+multiplication = (1 - mask_40x_array_expanded) * s0_array.data
 store_multiplication = dask.array.store(multiplication, desired_tissue._source_data, execute=False)
 print("Saving new Zarr")
 dask.compute(store_multiplication)  
@@ -114,7 +112,7 @@ for i in range(1, 4):
     shape = tuple((s0_array.shape[0] // 2**i, s0_array.shape[1] // 2**i,3))
     # format data as funlib dataset
     raw = prepare_ds(
-        mask_applied_zarr / "raw" / f"s{i}",
+        desired_tissue_zarr / "raw" / f"s{i}",
         shape,
         s0_array.offset,
         voxel_size,
@@ -125,7 +123,7 @@ for i in range(1, 4):
     )
     # storage info
     #store_rgb = zarr.open(mask_applied_zarr / "raw" / f"s{i}", mode="w")
-    prev_layer = open_ds(mask_applied_zarr / "raw" / f"s{i-1}")
+    prev_layer = open_ds(desired_tissue_zarr / "raw" / f"s{i-1}")
 
     # mean downsampling
     dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
