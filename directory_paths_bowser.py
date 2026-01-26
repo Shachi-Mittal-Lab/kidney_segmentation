@@ -3,7 +3,7 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/convert_to_zarr") #Eric edit
+input_path = Path("/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/full_pipeline_results_bowser_04Dec2025") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation/omni-seg/input")
@@ -21,15 +21,15 @@ axis_names = [
 
 # cortex vs medulla model info
 cortmed_weights_path = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/model5_epoch8.pt" #Eric edit
+    "/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/kidney_segmentation/model5_epoch8.pt" #Eric edit
 )
 cortmed_starting_model_path = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/starting_model.pt" #Eric edit
+    "/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/kidney_segmentation/starting_model.pt" #Eric edit
 )
 
 # kmeans clustering centers
 gray_cluster_centers = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/average_centers_5.txt" #Eric edit
+    "/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/kidney_segmentation/fibrosis_score/average_centers_5.txt" #Eric edit
 )
 
 # omni-seg output path

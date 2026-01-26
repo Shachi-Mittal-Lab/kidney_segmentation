@@ -159,7 +159,7 @@ def upsample(
             s0_data = np.repeat(s0_data, reps, axis=axis)
         mask_40x[block.write_roi] = s0_data
 
-    block_roi = Roi((0, 0), (1000, 1000)) * s0_array.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * s0_array.voxel_size
 
     upsample_task = daisy.Task(
         "blockwise_upsample",
@@ -188,7 +188,7 @@ def tissuemask_upsample(
             s0_data = np.repeat(s0_data, reps, axis=axis)
         fg_eroded_s0[block.write_roi] = s0_data
 
-    block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
     upsample_task = daisy.Task(
         "blockwise_upsample",
         total_roi=s0_array.roi,
@@ -229,7 +229,7 @@ def id_tbm(
         tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
         tbm_mask[block.write_roi] = tbm
 
-    block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
     tbm_task = daisy.Task(
         "ID TBM",
         total_roi=s0_array.roi,
@@ -268,7 +268,7 @@ def id_bc(
         bc = gaussian(bc.astype(float), sigma=2.0) > 0.5
         bc_mask[block.write_roi] = bc
 
-    block_roi = Roi((0, 0), (1000, 1000)) * fg_eroded_s0.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
     bc_task = daisy.Task(
         "ID Bowman's Capsule",
         total_roi=s0_array.roi,
@@ -299,7 +299,7 @@ def downsample_vessel(
         )  # Average over grouped blocks
         vessel10x[block.write_roi] = downsampled
 
-    block_roi = Roi((0, 0), (1000, 1000)) * vessel_mask.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * vessel_mask.voxel_size
 
     downsample_task = daisy.Task(
         "blockwise_downsample",
@@ -312,9 +312,43 @@ def downsample_vessel(
     )
     daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
 
+def downsample_fibrosis(
+        finfib_mask: Array,
+        abnormaltissue_mask: Array,
+):
+    downsample_factor = 8 # 40x to 5x
+
+    def downsample_block(block: daisy.Block):
+        s0_data = finfib_mask[block.read_roi]
+        new_shape = (
+            s0_data.shape[0] // downsample_factor,
+            downsample_factor,
+            s0_data.shape[1] // downsample_factor,
+            downsample_factor,
+        )
+        downsampled = s0_data.reshape(new_shape).mean(
+            axis=(1, 3)
+        )  # Average over grouped blocks
+        abnormaltissue_mask[block.write_roi] = downsampled
+
+    block_roi = Roi((0, 0), (3000, 3000)) * finfib_mask.voxel_size
+
+    downsample_task = daisy.Task(
+        "blockwise_downsample",
+        total_roi=finfib_mask.roi,
+        read_roi=block_roi,
+        write_roi=block_roi,
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=downsample_block,
+    )
+    daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
+    
+
 def remove_small_fib(
         finfib_mask: Array,
         s0_array: Array,
+        smallfib_mask: Array,
 ):
 # blockwise mask multiplications
     def fibfilter_block(block: daisy.Block):
@@ -323,7 +357,9 @@ def remove_small_fib(
         # remove small fib sections
         labeled = label(fib.astype(bool), connectivity=2)
         filtered_fib = remove_small_objects(labeled, min_size=5000)
-        finfib_mask[block.write_roi] = filtered_fib
+        removed_areas = labeled.astype(bool) * (1-filtered_fib.astype(bool))
+        smallfib_mask[block.write_roi] = removed_areas
+        finfib_mask[block.write_roi] = filtered_fib.astype(bool)
 
 
     fibfilter_task = daisy.Task(
@@ -340,7 +376,7 @@ def remove_small_fib(
 
 def calculate_fibscore(
         finfib_mask: Array,
-        fg_eroded_s0: Array,
+        cortex_eroded: Array,
         vessel_mask: Array,
         fincap_mask: Array,
         zarr_path: Path,
@@ -351,13 +387,14 @@ def calculate_fibscore(
     def fibscore_block(block: daisy.Block):
         # in data
         fib = finfib_mask[block.read_roi]
-        fg_er = fg_eroded_s0[block.read_roi]
+        fg_er = cortex_eroded[block.read_roi]
         vessel = vessel_mask[block.read_roi]
         cap = fincap_mask[block.read_roi]
         # calc positive pixels in mask
         fibpx = np.count_nonzero(fib)
-        fgpx = fg_er * (1 - vessel) * (1 - cap)
-        fgpx = np.count_nonzero(fgpx)
+        fgpx = np.count_nonzero(fg_er)
+        fgnoglomvesselpx = fg_er * (1 - vessel) * (1 - cap)
+        fgnoglomvesselpx = np.count_nonzero(fgnoglomvesselpx)
 
         # write to text file
         # create text file
@@ -365,6 +402,8 @@ def calculate_fibscore(
             f.writelines(f"{fibpx} \n")
         with open(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt"), "a") as f:
             f.writelines(f"{fgpx} \n")
+        with open(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt"), "a") as f:
+            f.writelines(f"{fgnoglomvesselpx} \n")
 
 
     fibscore_task = daisy.Task(
@@ -413,3 +452,42 @@ def calculate_inflammscore(
         process_function=inflammscore_block,
     )
     daisy.run_blockwise(tasks=[inflammscore_task], multiprocessing=False)
+
+def clean_visualization(
+        vessel_mask: Array,
+        fincap_mask: Array,
+        tubule_mask: Array,
+        s0_array: Array,
+):
+# blockwise mask multiplications
+    def cleaning_block(block: daisy.Block):
+        # read in masks
+        vessels = vessel_mask[block.read_roi]
+        caps = fincap_mask[block.read_roi]
+        tubules = tubule_mask[block.read_roi]
+
+        # if pixels are positive in tubule & capsules
+        # remove positive pixels in capsule mask
+        fincap_mask[block.write_roi] = caps * (1 - tubules)
+
+        # if pixels are positive in tubule & vessels
+        # remove positive pixels in vessel mask
+        vessel_mask[block.write_roi] = vessels * (1 - tubules)
+        vessels = vessel_mask[block.read_roi]
+
+        # if pixels are positive in capsule & vessels
+        # remove positive pixels in vessel mask
+        vessel_mask[block.write_roi] = vessels * (1 - caps)
+
+
+    cleaning_task = daisy.Task(
+        "Cleaning Visualizations",
+        total_roi=s0_array.roi,
+        read_roi=Roi((0, 0), (1000000, 1000000)),
+        write_roi=Roi((0, 0), (1000000, 1000000)),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=cleaning_block,
+    )
+    daisy.run_blockwise(tasks=[cleaning_task], multiprocessing=False)
+
