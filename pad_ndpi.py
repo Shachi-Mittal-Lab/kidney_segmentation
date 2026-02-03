@@ -10,6 +10,7 @@ ndpi_path = Path("/home/riware/Desktop/mittal_lab/padded_images/BR21-2023-B-A-1-
 zarr_path = Path("/home/riware/Desktop/mittal_lab/padded_images/BR21-2023-B-A-1-9-TRICHROME - 2022-11-09 14.48.18_padded.zarr")
 # slide offset (zero)
 offset = (0, 0)
+# add padding along height, width, 0
 padding = (5000, 0, 0)
 # axis names
 axis_names = [
@@ -18,9 +19,6 @@ axis_names = [
     "c^",
 ]
 #############
-ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding)
-quit()
-
 
 # grab resolution from image 
 def openndpi(ndpi_path):
@@ -47,3 +45,4 @@ if __name__ == "__main__":
     plt.imshow(preview_region)
     plt.show()
     
+ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding)

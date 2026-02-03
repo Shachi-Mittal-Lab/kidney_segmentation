@@ -177,7 +177,6 @@ def upsample(
 def tissuemask_upsample(
     fg_eroded: Array,
     fg_eroded_s0: Array,
-    s0_array: Array,
     upsampling_factor: Coordinate,
 ):
     # upsample 5x eroded tissue mask to use to filter predictions
@@ -191,7 +190,7 @@ def tissuemask_upsample(
     block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
     upsample_task = daisy.Task(
         "blockwise_upsample",
-        total_roi=s0_array.roi,
+        total_roi=fg_eroded_s0.roi,
         read_roi=block_roi,
         write_roi=block_roi,
         read_write_conflict=False,

@@ -138,7 +138,8 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
     dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
     print("NDPI Opened")
     s0_shape = dask_array0.shape
-    s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding)
+    offset_plus_channels = offset + (0,)
+    s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding) + Coordinate(offset_plus_channels)
     units = ("nm", "nm")
     # grab resolution in cm, convert to nm, calculate for each pyramid level
     voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
