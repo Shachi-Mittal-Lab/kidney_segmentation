@@ -67,7 +67,7 @@ napari.run()  # check to be sure the annotations are there
 
 upsampling_factor = mask_5x_array.voxel_size / mask_40x_array.voxel_size
 
-tissuemask_upsample(mask_5x_array, mask_40x_array, s0_array, upsampling_factor)
+tissuemask_upsample(mask_5x_array, mask_40x_array, upsampling_factor)
 
 # apply tissue mask to zarr and then create new zarr with mask applied
 # format new zarr

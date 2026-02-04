@@ -357,7 +357,7 @@ def run_full_pipeline(
     )
 
     # upsample tissue mask from 5x to 40x
-    tissuemask_upsample(fg_eroded, fg_eroded_s0, s0_array, upsampling_factor)
+    tissuemask_upsample(fg_eroded, fg_eroded_s0, upsampling_factor)
 
     # Remove overlaps in masks 
     clean_visualization(vessel_mask, fincap_mask, tubule_mask, s0_array)
