@@ -318,7 +318,7 @@ def run_full_pipeline(
     binary_head = torch.load("binaryhead_unet_dataset3_tubule0_LSDs_400.pt", weights_only=False)
     # predict
     print_gpu_usage(device)
-    model_prediction_lsds(tubule_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Tubule ID")
+    model_prediction_lsds(tubule_mask_10x, s2_array, patch_size_final, padding_affected_size, model, binary_head, device, "Tubule ID")
 
     print("Predicting Vessels with U-Net")
     #### Use U-net to predict vessel ####
@@ -332,7 +332,7 @@ def run_full_pipeline(
     print_gpu_usage(device)
 
     # predict
-    model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Vessel ID")
+    model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, padding_affected_size, model, binary_head, device, "Vessel ID")
     # remove small objects from vessel mask
     vessel_mask_10x._source_data[:] = remove_small_objects(
         vessel_mask_10x._source_data[:].astype(bool), min_size=2000
