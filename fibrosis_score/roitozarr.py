@@ -28,14 +28,14 @@ def openndpi(ndpi_path):
     # these resolutions are px/cm and will convert to nm/px later
     x_res = float(slide.properties["tiff.XResolution"])
     y_res = float(slide.properties["tiff.YResolution"])
-    return x_res, y_res, units
+    return x_res, y_res
 
 def opensvs(svs_path):
     slide = openslide.OpenSlide(svs_path)
     # these resolutions are in micrometer/px and I convert to nm/px here
     x_res = float(slide.properties["openslide.mpp-x"]) * 1000
     y_res = float(slide.properties["openslide.mpp-y"]) * 1000
-    return x_res, y_res, units
+    return x_res, y_res
 
 if __name__ == "__main__": 
     # open highest pyramid level
