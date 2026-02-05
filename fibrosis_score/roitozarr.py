@@ -53,7 +53,7 @@ if __name__ == "__main__":
     print(f"width: {max_width}, height: {max_height}")
 
     # preview slide 
-    preview_level = 4
+    preview_level = len(slide.level_dimensions) - 1
     max_prev_width, max_prev_height = slide.level_dimensions[preview_level]
     preview_region = slide.read_region(location=(0,0), level=preview_level, size=(max_prev_width, max_prev_height))
 
