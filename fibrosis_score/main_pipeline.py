@@ -111,7 +111,7 @@ def run_full_pipeline(
     else:
         print(f"File must be of format .ndpi, .svs, or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
-    
+    return
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
@@ -277,8 +277,13 @@ def run_full_pipeline(
             T.Normalize([0.5], [0.5]),  # 0.5 = mean and 0.5 = variance
         ]
     )
+    # size to feed to u-nets in pixels
     patch_shape_final = Coordinate(1056, 1056)
+    # size to feed to u-nets in nm
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
+    # calculate size affected by padding of the 1056 x 1056 block
+    padding_affected_shape = Coordinate(208,208)
+    padding_affected_size = padding_affected_shape * s2_array.voxel_size  # size in nm
 
     print("Predicting Gloms with U-Net")
     #### Use U-net to predict gloms ####
@@ -290,7 +295,7 @@ def run_full_pipeline(
     print_gpu_usage(device)
 
     # predict
-    model_prediction_lsds(cap_mask_10x, s2_array, patch_size_final, model, binary_head, device, "Cap ID")
+    model_prediction_lsds(cap_mask_10x, s2_array, patch_size_final, padding_affected_size, model, binary_head, device, "Cap ID")
 
     # remove small objects from cap mask
     cap_mask_10x._source_data[:] = remove_small_objects(

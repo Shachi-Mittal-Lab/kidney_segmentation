@@ -67,7 +67,8 @@ def model_prediction(
 def model_prediction_lsds(
     mask: Array,
     s2_array: Array,
-    patch_size_final: Array,
+    patch_size_final: Coordinate,
+    padding_affected_size: Coordinate,
     model: torch.nn.Module,
     binary_head: torch.nn.Module,
     device: torch.device,
@@ -81,6 +82,9 @@ def model_prediction_lsds(
         # we want [0:512, 0:512, :]
         #inslices = (inslices[1], inslices[2], inslices[0])
         img = Image.fromarray(s2_array[inslices])
+        img_shape = img.size
+        print(f"Image shape: {img_shape}")
+        img_px = int(img_shape[0])
         input = inp_transforms(img).unsqueeze(1).to(device)
         model.eval()
         binary_head.eval()
@@ -90,13 +94,22 @@ def model_prediction_lsds(
             preds = preds[:,0,:,:]
             preds = preds.squeeze().cpu().detach().numpy()
             preds = preds > 0.5
-        mask[block.write_roi] = preds[208:848,208:848]
+        pad_shape = padding_affected_size / s2_array.voxel_size
+        print(f"Pad Shape: {pad_shape}")
+        pad_px = pad_shape[0]
+        print(f"Pad Px: {pad_px}")
+        start_write = int(pad_px)
+        end_write = img_px - pad_px
+        print(f"Start write: {start_write} and end write: {end_write}")
+        calc = patch_size_final -  padding_affected_size[0] * 2
+        print(f"Calculation: {calc}")
+        mask[block.write_roi] = preds[start_write:end_write,start_write:end_write]
 
     pred_task = daisy.Task(
         task,
         total_roi=s2_array.roi,
         read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
-        write_roi=Roi((188032, 188032), patch_size_final -  376064),
+        write_roi=Roi(padding_affected_size, patch_size_final -  padding_affected_size[0] * 2),
         read_write_conflict=False,
         num_workers=2,
         process_function=process_block,
