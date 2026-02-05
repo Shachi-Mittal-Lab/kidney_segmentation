@@ -24,6 +24,7 @@ def openndpi(ndpi_path, pyramid_level):
 
 def opensvs(svs_path, pyramid_level):
     slide = openslide.OpenSlide(svs_path)
+    # grab resolution at micrometeres / px and convert to nm / px
     x_res = float(slide.properties["openslide.mpp-x"]) * 1000
     y_res = float(slide.properties["openslide.mpp-y"]) * 1000
     units = ("nm", "nm")

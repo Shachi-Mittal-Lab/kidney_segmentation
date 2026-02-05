@@ -16,25 +16,39 @@ import openslide
 from matplotlib import pyplot as plt
 
 ## inputs ##
-ndpi_path = Path("/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/verylargeimages/BR22-2096-A-1-9-TRICHROME - 2022-11-11 17.42.10.ndpi")
-zarr_path = Path("/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/verylargeimages/BR22-2096-A-1-9-TRICHROME - 2022-11-11 17.42.10_region.zarr")
+input_path = Path("/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/verylargeimages/BR22-2096-A-1-9-TRICHROME - 2022-11-11 17.42.10.ndpi")
+roi_zarr = input_path.parent / f"{input_path.stem}_region.zarr"
 
 #############
+input_file_ext = input_path.suffix
 
 # grab resolution from image 
-def openndpi(ndpi_path, pyramid_level):
-    slide = openslide.OpenSlide(str(ndpi_path)) #Eric edit
+def openndpi(ndpi_path):
+    slide = openslide.OpenSlide(str(ndpi_path))
+    # these resolutions are px/cm and will convert to nm/px later
     x_res = float(slide.properties["tiff.XResolution"])
     y_res = float(slide.properties["tiff.YResolution"])
-    units = slide.properties["tiff.ResolutionUnit"]
+    return x_res, y_res, units
+
+def opensvs(svs_path):
+    slide = openslide.OpenSlide(svs_path)
+    # these resolutions are in micrometer/px and I convert to nm/px here
+    x_res = float(slide.properties["openslide.mpp-x"]) * 1000
+    y_res = float(slide.properties["openslide.mpp-y"]) * 1000
     return x_res, y_res, units
 
 if __name__ == "__main__": 
     # open highest pyramid level
-    x_res, y_res, units = openndpi(ndpi_path, 0)
+    if input_file_ext == ".ndpi":
+        x_res, y_res = openndpi(input_path)
+        # convert to nm/px
+        voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
+    if input_file_ext == ".svs": 
+        x_res, y_res = opensvs(input_path)
+        # no conversion needed
+        voxel_size0 = Coordinate(int(x_res), int(y_res))
 
-    # read region & convert to RGB from RGBA and np to dask
-    slide = openslide.OpenSlide(str(ndpi_path))
+    slide = openslide.OpenSlide(str(input_path))
     max_width, max_height = slide.dimensions
     print(f"width: {max_width}, height: {max_height}")
 
@@ -67,11 +81,10 @@ if __name__ == "__main__":
         "y",
         "c^",
     ]
-    voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
 
     # format data as funlib dataset
     raw = prepare_ds(
-        zarr_path / "raw" / "s0",
+        roi_zarr / "raw" / "s0",
         s0_shape,
         offset,
         voxel_size0,
@@ -81,7 +94,7 @@ if __name__ == "__main__":
         dtype=np.uint8,
     )
     # storage info
-    store_rgb = zarr.open(zarr_path / "raw" / "s0")
+    store_rgb = zarr.open(roi_zarr / "raw" / "s0")
 
     with ProgressBar():
         dask.array.store(dask_array, store_rgb)
@@ -91,7 +104,7 @@ if __name__ == "__main__":
         voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
         # format data as funlib dataset
         raw = prepare_ds(
-            zarr_path / "raw" / f"s{i}",
+            roi_zarr / "raw" / f"s{i}",
             expected_shape,
             offset,
             voxel_size,
@@ -101,8 +114,8 @@ if __name__ == "__main__":
             dtype=np.uint8,
         )
         # storage info
-        store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
-        prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
+        store_rgb = zarr.open(roi_zarr / "raw" / f"s{i}")
+        prev_layer = open_ds(roi_zarr / "raw" / f"s{i-1}")
         # mean downsampling
         dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
     # save to zarr
