@@ -19,8 +19,10 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
     dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
     print("NDPI Opened")
     s0_shape = dask_array0.shape
+    # native units are listed as "centimeter" but are 
+    # px/cm so manually reassigning to nm
     units = ("nm", "nm")
-    # grab resolution in cm, convert to nm, calculate for each pyramid level
+    # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
     voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
     # format data as funlib dataset
     raw = prepare_ds(
@@ -45,7 +47,7 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
-            # grab resolution in cm, convert to nm, calculate for each pyramid level
+            # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
             print(f"expected shape: {expected_shape}")
@@ -104,7 +106,7 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
         except TypeError:
             print(f"Layer {i} does not exist.  Generating")
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i-1)
-            # grab resolution in cm, convert to nm, calculate for each pyramid level
+            # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
             print(f"expected shape: {expected_shape}")
@@ -140,8 +142,10 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
     offset_plus_channels = offset + (0,)
     s0_shape = dask_array0.shape
     s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding) + Coordinate(offset_plus_channels)
+    # native units are listed as "centimeter" but are 
+    # px/cm so manually reassigning to nm
     units = ("nm", "nm")
-    # grab resolution in cm, convert to nm, calculate for each pyramid level
+    # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
     voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
     # format data as funlib dataset
     raw = prepare_ds(
@@ -168,7 +172,7 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
-            # grab resolution in cm, convert to nm, calculate for each pyramid level
+            # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
             expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
@@ -233,7 +237,7 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
         except TypeError:
             print(f"Layer {i} does not exist.  Generating")
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i-1)
-            # grab resolution in cm, convert to nm, calculate for each pyramid level
+            # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
             print(f"expected padded shape: {expected_padded_shape}")
@@ -267,9 +271,9 @@ def svs_to_zarr(svs_path, zarr_path, offset, axis_names):
     # open highest pyramid level
     dask_array0, x_res, y_res, units = opensvs(svs_path, 0)
     s0_shape = dask_array0.shape
-    units = ("nm", "nm")
-    # grab resolution in cm, convert to nm, calculate for each pyramid level
-    voxel_size0 = Coordinate(int(1 / x_res * 1e7), int(1 / y_res * 1e7))
+    # units are natively ("nm", "nm") so no need to convert to get voxel size
+    # convert to integer and calculate for each pyramid level
+    voxel_size0 = Coordinate(int(x_res), int(y_res))
     # format data as funlib dataset
     raw = prepare_ds(
         zarr_path / "raw" / "s0",
@@ -292,10 +296,9 @@ def svs_to_zarr(svs_path, zarr_path, offset, axis_names):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = opensvs(svs_path, i)
-            # grab resolution in cm, convert to nm, calculate for each pyramid level
-            voxel_size = Coordinate(
-                int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i
-            )
+            # units are natively ("nm", "nm") so no need to convert to get voxel size
+            # convert to integer and calculate for each pyramid level
+            voxel_size0 = Coordinate(int(x_res), int(y_res))
             expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i, 3))
             print(f"expected shape: {expected_shape}")
             print(f"actual shape: {dask_array.shape}")
