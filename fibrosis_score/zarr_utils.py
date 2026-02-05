@@ -138,6 +138,7 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
     dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
     print("NDPI Opened")
     offset_plus_channels = offset + (0,)
+    s0_shape = dask_array0.shape
     s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding) + Coordinate(offset_plus_channels)
     units = ("nm", "nm")
     # grab resolution in cm, convert to nm, calculate for each pyramid level
@@ -170,11 +171,13 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
             # grab resolution in cm, convert to nm, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
+            expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
+            print(f"expected image shape: {expected_shape}")
             print(f"expected padded shape: {expected_padded_shape}")
             print(f"actual shape: {dask_array.shape}")
 
             # check shape is expected shape 
-            if dask_array.shape == expected_padded_shape:
+            if dask_array.shape == expected_shape:
                 print("correct shape")
                 # format data as funlib  with padding
 
@@ -198,7 +201,6 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
                 with ProgressBar():
                     dask.compute(store_raw)
 
-        
             else:
                 voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
                 # format data as funlib dataset
@@ -234,7 +236,7 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
             # grab resolution in cm, convert to nm, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
             expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
-            print(f"expected shape: {expected_padded_shape}")
+            print(f"expected padded shape: {expected_padded_shape}")
 
             # format data as funlib dataset
             raw = prepare_ds(
