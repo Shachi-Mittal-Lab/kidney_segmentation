@@ -111,7 +111,7 @@ def run_full_pipeline(
     else:
         print(f"File must be of format .ndpi, .svs, or .zarr.  File extension is {input_file_ext}. Skipping {input_filename}")
         return
-    return
+
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")

@@ -98,9 +98,7 @@ def model_prediction_lsds(
         pad_px = pad_shape[0]
         start_write = int(pad_px)
         end_write = img_px - pad_px
-        print(f"Padding affected size: {padding_affected_size}, want: (188032, 188032)")
         calc = patch_size_final -  padding_affected_size[0] * 2
-        print(f"Calculation: {calc}, want: {patch_size_final - 376064}")
         mask[block.write_roi] = preds[start_write:end_write,start_write:end_write]
 
     pred_task = daisy.Task(
