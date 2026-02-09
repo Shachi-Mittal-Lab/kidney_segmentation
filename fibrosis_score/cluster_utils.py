@@ -4,7 +4,9 @@ import cv2
 from PIL import Image
 from sklearn.cluster import KMeans
 from skimage.morphology import remove_small_objects
+from skimage import exposure
 
+"""
 # sigmoid normalization
 # https://en.wikipedia.org/wiki/Normalization_(image_processing)
 def sigmoid_norm(gray_array):
@@ -17,6 +19,7 @@ def sigmoid_norm(gray_array):
     eterm = np.exp(-(gray_array - beta) / alpha)
     gray_array = (newmax - newmin) * (1 / (1 + eterm)) + newmin
     return gray_array
+"""
 
 
 def prepare_clustering(gray_cluster_centers):
@@ -41,17 +44,22 @@ def grayscale_cluster(
     inflammation_mask,
     structuralcollagen_mask,
 ):
-    
+
     patch_raw = np.transpose(patch_raw, axes=(1, 0, 2))
     patch_raw = patch_raw[:, :, ::-1]  # flip to rgb
-    #roi_rgb = Image.fromarray(patch_raw, 'RGB')
-    #cv2.imwrite(str(patchpath), patch_raw)
+    # roi_rgb = Image.fromarray(patch_raw, 'RGB')
+    # cv2.imwrite(str(patchpath), patch_raw)
     # convert to grayscale & format for k means
     # roi_gbr = cv2.imread(str(patchpath))
-    #roi_rgb = cv2.cvtColor(roi_gbr, cv2.COLOR_BGR2RGB)
+    # roi_rgb = cv2.cvtColor(roi_gbr, cv2.COLOR_BGR2RGB)
     roi_gray = cv2.cvtColor(patch_raw, cv2.COLOR_RGB2GRAY)
-    roi_gray = sigmoid_norm(roi_gray)
-    roi_gray_flat = roi_gray.flatten()
+    roi_gray_normalized = exposure.adjust_sigmoid(
+        roi_gray,
+        cutoff=0.7,  # midpoint (normalized 0–1)
+        gain=2,  # steepness (higher = steeper)
+        inv=False,
+    )
+    roi_gray_flat = roi_gray_normalized.flatten()
     # k means predict
     roi_gray_flat = np.expand_dims(roi_gray_flat, axis=1)
     prediction = clustering.predict(roi_gray_flat)

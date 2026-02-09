@@ -29,7 +29,7 @@ cortmed_starting_model_path = Path(
 
 # kmeans clustering centers
 gray_cluster_centers = Path(
-    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/average_centers_5.txt" #Eric edit
+    "/media/mrl/Data/pipeline_connection/kidney_segmentation/models/average_centers_5_skimage.txt" #Eric edit
 )
 
 # omni-seg output path
