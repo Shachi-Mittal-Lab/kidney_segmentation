@@ -4,6 +4,9 @@ omni-seg/apex/
 # inputs 
 directory_paths
 
+# cellpose models
+CP_20260223_084158
+
 # outputs
 clinical_patches/
 final_merge/

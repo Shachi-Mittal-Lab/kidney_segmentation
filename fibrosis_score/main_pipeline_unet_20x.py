@@ -1,9 +1,8 @@
 # Repo Tools
-from fibrosis_score.zarr_utils import ndpi_to_zarr, omniseg_to_zarr, svs_to_zarr
+from fibrosis_score.zarr_utils import ndpi_to_zarr, svs_to_zarr
 from fibrosis_score.mask_utils import (
     prepare_mask,
     prepare_foreground_masks,
-    prepare_clustering_masks,
     prepare_seg_masks,
     prepare_postprocessing_masks,
     prepare_patch_mask,
@@ -11,19 +10,15 @@ from fibrosis_score.mask_utils import (
     generate_grid_mask,
 )
 from fibrosis_score.patch_utils_dask import foreground_mask
-from fibrosis_score.cluster_utils import prepare_clustering, grayscale_cluster
 from fibrosis_score.pred_utils import pred_cortex
 from fibrosis_score.processing_utils import fill_holes, erode, varied_vessel_dilation, print_gpu_usage
-from fibrosis_score.daisy_blocks import (
-    model_prediction,
-    model_prediction_rgb,
+from fibrosis_score.daisy_blocks_nocluster import (
     model_prediction_lsds,
     upsample,
     tissuemask_upsample,
     id_tbm,
     id_bc,
-    downsample_vessel,
-    downsample_fibrosis,
+    downsample_fibrosis_20x,
     clean_visualization,
     calculate_fibscore,
     calculate_inflammscore,
@@ -31,37 +26,27 @@ from fibrosis_score.daisy_blocks import (
 )
 
 # Funke Lab Tools
-import daisy
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 
 # Tools
-import os
-import subprocess
-import sys
 from pathlib import Path
 import time
+from tqdm import tqdm
 
 import dask
 import dask.array
-from dask.diagnostics import ProgressBar
 from dask.array import coarsen, mean
 import zarr
-import zarr.convenience
-
+# import zarr.convenience
 import numpy as np
-import cv2
-from PIL import Image
-from tqdm import tqdm
 
 from skimage.transform import integral_image
 from skimage.morphology import (
-    binary_erosion,
-    binary_dilation,
-    disk,
     remove_small_objects,
     remove_small_holes,
 )
+
 from skimage.filters import gaussian
 from skimage.measure import label
 from scipy.ndimage import gaussian_filter
@@ -71,14 +56,9 @@ import torchvision.transforms as T
 
 def run_full_pipeline(
         input_path: Path,
-        png_path: Path,
         threshold: int,
         offset: Coordinate,
         axis_names: list,
-        gray_cluster_centers: Path,
-        output_directory: Path,
-        omni_seg_path: Path,
-        subprocesswd: Path,
 ):
 
     # check there is a GPU
@@ -93,7 +73,6 @@ def run_full_pipeline(
     input_file_ext = input_path.suffix
     print(input_filename)
     start_time = time.time()
-
 
     # convert file to zarr if not a zarr
     if input_file_ext == ".ndpi":
@@ -118,7 +97,7 @@ def run_full_pipeline(
     # grab 5x, 10x levels & calculate foreground masks
     s3_array = open_ds(zarr_path / "raw" / "s3")
     s2_array = open_ds(zarr_path / "raw" / "s2")
-    s0_array = open_ds(zarr_path / "raw" / "s0")
+    s1_array  = open_ds(zarr_path / "raw" / "s1")
 
     print("Generating Foreground Masks")
     fmask, filled_fmask, eroded_fmask, abnormaltissue_mask = prepare_foreground_masks(zarr_path, s3_array)
@@ -171,105 +150,29 @@ def run_full_pipeline(
     # create eroded foreground mask in 40x to apply to segmentations
     # and use as denominator in fibrosis calculations
     eroded_cortex_mask_5x = prepare_mask(zarr_path, s3_array, "eroded_cortex_5x")
-    eroded_cortex_mask_40x = prepare_mask(zarr_path, s0_array, "eroded_cortex_40x")
+    eroded_cortex_mask_20x = prepare_mask(zarr_path, s1_array, "eroded_cortex_20x")
     cortex_erosion_multiplication = eroded_fmask.data * pred_mask.data
     eroded_cortex_5x = dask.array.store(cortex_erosion_multiplication, eroded_cortex_mask_5x._source_data, execute=False)
     dask.compute(eroded_cortex_5x)
-    upsampling_factor = eroded_cortex_mask_5x.voxel_size / eroded_cortex_mask_40x.voxel_size
-    upsample(eroded_cortex_mask_5x, eroded_cortex_mask_40x, upsampling_factor, s3_array, s0_array)
+    upsampling_factor = eroded_cortex_mask_5x.voxel_size / eroded_cortex_mask_20x.voxel_size
+    upsample(eroded_cortex_mask_5x, eroded_cortex_mask_20x, upsampling_factor, s3_array, s1_array)
 
-    # create patch mask for Omni-Seg
-    patch_shape_final = Coordinate(512, 512)  # Will convention: shape in voxels
-
-    patch_count_mask_final, patch_size_final = generate_patchcount_mask(
-        icmask, patch_shape_final, tissueallowance=0.10
-    )
-
-    # generate gridmask
-    patch_spacing_final = Coordinate(256, 256)
-    gridmaskfinal = generate_grid_mask(patch_count_mask_final, patch_spacing_final)
-
-    # create patch mask
-    patch_mask_final = prepare_patch_mask(
-        zarr_path, s3_array, patch_count_mask_final, "patch_mask_final"
-    )
-    patch_mask_final._source_data[:] = gridmaskfinal * patch_count_mask_final
-
-    # Generate list of coordinates of patches
-    coords = np.nonzero(patch_mask_final._source_data[:])
-    offsets_final = [
-        patch_mask_final.roi.offset + Coordinate(a, b) * patch_mask_final.voxel_size
-        for a, b in zip(*coords)
-    ]
-
-    # create visualization of regions pulled
-    roi_mask = prepare_patch_mask(zarr_path, s3_array, patch_count_mask, "rois")
-
-    # get cluster centers
-    clustering, n_clusters = prepare_clustering(gray_cluster_centers)
-
-    print("Preparing Masks for Clustering")
-    # prepare clustering mask locations in zarr (40x)
-    fibrosis1_mask, fibrosis2_mask, inflammation_mask, structuralcollagen_mask = (
-        prepare_clustering_masks(zarr_path, s0_array)
-    )
     print("Preparing Masks for Segmentation")
     # prepare histological segmentation mask locations in zarr (10x)
     tubule_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
-    # prepare histological segmentation mask locations in zarr (40x)
-    tubule_mask, vessel_mask, cap_mask = prepare_seg_masks(zarr_path, s0_array, "40x")
+    # prepare histological segmentation mask locations in zarr (20x)
+    tubule_mask, vessel_mask, nuclei_mask = prepare_seg_masks(zarr_path, s1_array, "20x")
 
-    # prepare postprocessing masks in zarr (40x)
+    # prepare postprocessing masks in zarr (20x)
     tbm_mask, bc_mask, fincap_mask, finfib_mask, fincollagen_mask, fincollagen_exclusion_mask, fininflamm_mask = (
-        prepare_postprocessing_masks(zarr_path, s0_array)
+        prepare_postprocessing_masks(zarr_path, s1_array)
     )
-    # prep mask for cap at 10x
-    cap_mask10x = prepare_mask(zarr_path, s2_array, "cap10x")
+
     # create text file for fibrosis score data
     txt_path = input_path.with_suffix(".txt")
     with open(txt_path, "w") as f:
         f.writelines("ROI fibrosis scores \n")
         f.close()
-
-    print("Clustering")
-    for offset in tqdm(offsets_final):
-        # world units roi selection
-        roi = Roi(offset, patch_size_final)  # in nm
-        # visualize roi in mask
-        voxel_mask_roi = (roi - roi_mask.offset) / roi_mask.voxel_size
-        roi_mask._source_data[
-            voxel_mask_roi.begin[0] : voxel_mask_roi.end[0],
-            voxel_mask_roi.begin[1] : voxel_mask_roi.end[1],
-        ] = 1
-
-        # save image at diff pyramid levels for Omni-Seg input
-        # name roi
-        patchname = Path(f"{zarr_path.stem}_{offset}_pyr0.png")
-        patchpath = png_path / patchname
-        # select roi
-        array = open_ds(zarr_path / "raw" / f"s0")
-
-        # redefine roi on s0 array
-        patch_shape_final = Coordinate(4096, 4096)  # omniseg input was 4096/8192
-        patch_size_final = patch_shape_final * array.voxel_size  # nm
-        roi = Roi(offset, patch_size_final)  # nm
-        voxel_roi = (roi - array.offset) / array.voxel_size  # voxels
-        patch_raw = array[
-            voxel_roi.begin[0] : voxel_roi.end[0], voxel_roi.begin[1] : voxel_roi.end[1]
-        ]
-
-        # cluster 40x pyramid level
-        # save png of image at current pyramid level
-        grayscale_cluster(
-            patch_raw,
-            voxel_roi,
-            clustering,
-            n_clusters,
-            fibrosis1_mask,
-            fibrosis2_mask,
-            inflammation_mask,
-            structuralcollagen_mask,
-        )
 
     # begin u-net preds: define preprocessing & patch size
     inp_transforms = T.Compose(
@@ -283,6 +186,7 @@ def run_full_pipeline(
     patch_shape_final = Coordinate(1056, 1056)
     # size to feed to u-nets in nm
     patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
+
     # calculate size affected by padding of the 1056 x 1056 block
     padding_affected_shape = Coordinate(208,208)
     padding_affected_size = padding_affected_shape * s2_array.voxel_size  # size in nm
@@ -343,17 +247,41 @@ def run_full_pipeline(
     del model 
     torch.cuda.empty_cache()
 
-    # blockwise upsample from 10x to 40x
-    upsampling_factor = vessel_mask_10x.voxel_size / fincap_mask.voxel_size
-    upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s0_array)
-    upsample(tubule_mask_10x, tubule_mask, upsampling_factor, s2_array, s0_array)
-    upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s0_array)
+    # Prepare to predict at 20x #
+    # size to feed to u-nets in pixels
+    patch_shape_final = Coordinate(1056, 1056)
+    # size to feed to u-nets in nm
+    patch_size_final = patch_shape_final * s1_array.voxel_size  # size in nm
+    # calculate size affected by padding of the 1056 x 1056 block
+    padding_affected_shape = Coordinate(208,208)
+    padding_affected_size = padding_affected_shape * s1_array.voxel_size  # size in nm
 
-    # scale eroded foreground mask to 40x from 5x for final multiplications
+    print("Predicting Nuclei with U-Net")
+    #### Use U-net to predict nuclei at 20x ####
+    # load model
+    model = torch.load("model_unet_inflammdataset1_inflamm0_20x_LSDs_final.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_inflammdataset1_inflamm0_20x_LSDs_final.pt", weights_only=False)
+    print_gpu_usage(device)
+
+    # predict
+    model_prediction_lsds(nuclei_mask, s1_array, patch_size_final, padding_affected_size, model, binary_head, device, "Nuclei ID")
+
+    # remove previous model from gpu
+    del model 
+    torch.cuda.empty_cache()
+
+    # blockwise upsample from 10x to 20x
+    upsampling_factor = s2_array.voxel_size / s1_array.voxel_size
+    upsample(cap_mask_10x, fincap_mask, upsampling_factor, s2_array, s1_array)
+    upsample(tubule_mask_10x, tubule_mask, upsampling_factor, s2_array, s1_array)
+    upsample(vessel_mask_10x, vessel_mask, upsampling_factor, s2_array, s1_array)
+
+
+    # scale eroded foreground mask to 20x from 5x for final multiplications
     fg_eroded = open_ds(zarr_path / "mask" / "foreground_eroded")  # in s3
-    upsampling_factor = fg_eroded.voxel_size / vessel_mask.voxel_size
-    fg_eroded_s0 = prepare_ds(
-        zarr_path / "mask" / "foreground_eroded_s0",
+    upsampling_factor = fg_eroded.voxel_size / s1_array.voxel_size
+    fg_eroded_s1 = prepare_ds(
+        zarr_path / "mask" / "foreground_eroded_s1",
         shape=Coordinate(fg_eroded.shape) * upsampling_factor,
         offset=fg_eroded.offset,
         voxel_size=vessel_mask.voxel_size,
@@ -364,52 +292,48 @@ def run_full_pipeline(
     )
 
     # upsample tissue mask from 5x to 40x
-    tissuemask_upsample(fg_eroded, fg_eroded_s0, upsampling_factor)
+    tissuemask_upsample(fg_eroded, fg_eroded_s1, upsampling_factor)
 
     # Remove overlaps in masks 
-    clean_visualization(vessel_mask, fincap_mask, tubule_mask, s0_array)
+    clean_visualization(vessel_mask, fincap_mask, tubule_mask, s1_array)
 
     print("Identifying TBM")
     # need to erode and dilate to generate a TBM class
-    id_tbm(tubule_mask, structuralcollagen_mask, fibrosis1_mask, fibrosis2_mask, tbm_mask, s0_array, fg_eroded_s0)
+    id_tbm(tubule_mask, nuclei_mask, tbm_mask, s1_array)
 
     print("Identifying Bowman's Capsules")
     # need to erode and dilate to generate Bowman's Capsule class
     id_bc(
         fincap_mask,
-        structuralcollagen_mask,
-        fibrosis1_mask,
-        fibrosis2_mask,
+        nuclei_mask,
         bc_mask,
-        fg_eroded_s0,
-        s0_array,
+        s1_array,
     )
 
     print("Identifying Structural Collagen around Vessels")
     # create masks for vessel
     vessel10xdilated = prepare_mask(zarr_path, s2_array, "vessel10xdilated")
-    vessel40xdilated = prepare_mask(zarr_path, s0_array, "vessel40xdilated")
+    vessel20xdilated = prepare_mask(zarr_path, s1_array, "vessel20xdilated")
 
     # size of dilation of smallest object
     print("Dilating Vessels")
     varied_vessel_dilation(3, vessel_mask_10x, vessel10xdilated)
     print("Saving Dilation")
-    upsampling_factor = vessel10xdilated.voxel_size / vessel40xdilated.voxel_size
+    upsampling_factor = vessel10xdilated.voxel_size / vessel20xdilated.voxel_size
     print("Upsampling Dilation")
-    upsample(vessel10xdilated, vessel40xdilated, upsampling_factor, s2_array, s0_array)
-    #vessel_40x_dilated = open_ds(zarr_path / "mask" / "vessel40xdilated", mode="a")
+    upsample(vessel10xdilated, vessel20xdilated, upsampling_factor, s2_array, s1_array)
+    #vessel_40x_dilated = open_ds(zarr_path / "mask" / "vessel20xdilated", mode="a")
     print("Saving Upsample")
-    vessel40xdilated_multiplication = (
-        vessel40xdilated.data
-        * (1 - inflammation_mask.data)
+    vessel20xdilated_multiplication = (
+        vessel20xdilated.data
+        * (1 - nuclei_mask.data)
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
-        * (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
-        * (eroded_cortex_mask_40x.data)
+        * (eroded_cortex_mask_20x.data)
     )
-    vessel_store = dask.array.store(vessel40xdilated_multiplication, vessel40xdilated._source_data, execute=False)
+    vessel_store = dask.array.store(vessel20xdilated_multiplication, vessel20xdilated._source_data, execute=False)
     dask.compute(vessel_store)
     print("Completed Saving Upsampling")
 
@@ -417,14 +341,15 @@ def run_full_pipeline(
     print("Calculating Fibrosis Mask")
     # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
     finfib_multiplication = (
-        (fibrosis1_mask.data + fibrosis2_mask.data + structuralcollagen_mask.data)
+        fg_eroded_s1.data
+        * (1 - nuclei_mask.data)
         * (1 - vessel_mask.data)
-        * (1 - vessel40xdilated.data)
+        * (1 - vessel20xdilated.data)
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
-        * eroded_cortex_mask_40x.data
+        * eroded_cortex_mask_20x.data
     )
     print("Saving Fibrosis Mask")
     # execute multiplication
@@ -433,18 +358,14 @@ def run_full_pipeline(
     dask.compute(finfib_store)
 
     print("Removing Small Fibrosis Objects")
-    smallfib_mask = prepare_mask(zarr_path, s0_array, "smallfib")
-    remove_small_fib(finfib_mask, s0_array, smallfib_mask)
-
-    #confused_roi = Roi((0, 10000000), (1000000, 1000000))
-    #count = finfib_mask[confused_roi].sum()
-    #assert count == 63238, count
+    smallfib_mask = prepare_mask(zarr_path, s1_array, "smallfib")
+    remove_small_fib(finfib_mask, s1_array, smallfib_mask)
 
     print("Completed Saving Fibrosis Mask")
 
     print("Generatinging Abnormal Tissue Mask")  # ABNORMAL VS NORMAL TISSUE WILL BE CALCULATED IN THE 5X
     # downsample fibrosis mask for abnormal tissue visualization
-    downsample_fibrosis(finfib_mask, abnormaltissue_mask)
+    downsample_fibrosis_20x(finfib_mask, abnormaltissue_mask)
     # remove small objects from downsampled fibrosis mask
     labeled = label(abnormaltissue_mask.data.astype(bool), connectivity=2)
     filtered_fib = remove_small_objects(labeled, min_size=2000)
@@ -456,31 +377,15 @@ def run_full_pipeline(
     dask_abnormaltissue = dask_abnormaltissue * eroded_cortex_mask_5x.data
     dask.array.store(dask_abnormaltissue, abnormaltissue_mask._source_data, compute=True)
    
-    print("Calculating Structural Collagen Overlay")
-    # create final collagen overlay
-    fincollagen_mask_multiplication = (
-        (structuralcollagen_mask.data + vessel40xdilated.data + tbm_mask.data + bc_mask.data)
-        * (1 - tubule_mask.data)
-        * (1 - fincap_mask.data)
-        * (1 - vessel_mask.data)
-        * eroded_cortex_mask_40x.data
-    )
-    fincollagen_mask_multiplication = fincollagen_mask_multiplication >> 0
-    print("Saving Structural Collagen Overlay")
-    # execute multiplication
-    fincollagen_store = dask.array.store(fincollagen_mask_multiplication, fincollagen_mask._source_data, compute=False)
-    # store blockwise
-    dask.compute(fincollagen_store)
-
-    print("Compeleted Saving Structural Collagen Overlay")
-    print("Calculating Collagen Mask with Exclusion")
+    print("Calculating Structural Collagen Overlay with Exclusion")
     # create final collagen exclusion overlay
     fincollagen_exclusion_mask_multiplication = (
-        (vessel40xdilated.data + tbm_mask.data + bc_mask.data)
+        (vessel20xdilated.data + tbm_mask.data + bc_mask.data)
+        * (1 - nuclei_mask.data)
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
-        * eroded_cortex_mask_40x.data
+        * eroded_cortex_mask_20x.data
     )
     
     print("Saving Collagen Mask with Exclusion")
@@ -493,12 +398,12 @@ def run_full_pipeline(
     print("Calculating Inflammation Mask")
     # create final inflammation overlay
     fininflamm_mask_multiplication = (
-        inflammation_mask.data
+        nuclei_mask.data
         * (1 - vessel_mask.data)
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
-        * eroded_cortex_mask_40x.data
+        * eroded_cortex_mask_20x.data
     )
     print("Saving Inflammation Mask")
     # execute multiplication
@@ -509,13 +414,13 @@ def run_full_pipeline(
 
     # apply edge tissue & cortex mask to remaining masks
     print("Applying Foreground Cortex Mask to Masks")
-    fincap_mask_multiplication = fincap_mask.data * eroded_cortex_mask_40x.data
+    fincap_mask_multiplication = fincap_mask.data * eroded_cortex_mask_20x.data
     fincap_store = dask.array.store(fincap_mask_multiplication, fincap_mask._source_data, execute=False)
     dask.compute(fincap_store)
-    tubule_mask_multiplication = tubule_mask.data * eroded_cortex_mask_40x.data
+    tubule_mask_multiplication = tubule_mask.data * eroded_cortex_mask_20x.data
     tubule_store = dask.array.store(tubule_mask_multiplication, tubule_mask._source_data, execute=False)
     dask.compute(tubule_store)
-    vessel_mask_multiplication = vessel_mask.data * eroded_cortex_mask_40x.data
+    vessel_mask_multiplication = vessel_mask.data * eroded_cortex_mask_20x.data
     fin_vessel_store = dask.array.store(vessel_mask_multiplication, vessel_mask._source_data, execute=False)
     dask.compute(fin_vessel_store)
 
@@ -536,13 +441,13 @@ def run_full_pipeline(
 
     # Calculate fibrosis score at 40x
     print("Calculating Fibrosis Score")
-    calculate_fibscore(finfib_mask, eroded_cortex_mask_40x, vessel_mask, fincap_mask, zarr_path, input_filename, s0_array)
+    calculate_fibscore(finfib_mask, eroded_cortex_mask_20x, vessel_mask, fincap_mask, zarr_path, input_filename, s1_array)
     fibpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), comments="#", dtype=int)
     tissuenoglomvesselpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt", comments="#", dtype=int))
     tissuepx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt", comments="#", dtype=int))
 
     print("Calculating Inflammation Score")
-    calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, input_filename, s0_array)
+    calculate_inflammscore(fininflamm_mask, fincollagen_exclusion_mask, finfib_mask, zarr_path, input_filename, s1_array)
     inflammpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_inflammpx.txt"), comments="#", dtype=int)
     interstitiumpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_interstitiumpx.txt", comments="#", dtype=int))
     

@@ -6,6 +6,7 @@ from model import UNet, ConvBlock, Downsample, CropAndConcat, OutputConv
 # Tools
 from pathlib import Path
 from PIL import Image, ImageOps
+from rembg import remove
 from matplotlib import pyplot as plt
 import torch
 import torchvision.transforms as T
@@ -19,8 +20,8 @@ else:
     device = torch.device("cpu")
 print(f"Using {device}")
 
-model = torch.load("model_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
-binary_head = torch.load("binaryhead_unet_dataset1_tubule0_LSDs_400.pt", weights_only=False)
+model = torch.load("model_unet_dataset3_tubule0_LSDs_400.pt", weights_only=False)
+binary_head = torch.load("binaryhead_unet_dataset3_tubule0_LSDs_400.pt", weights_only=False)
 
 tiff_dir = Path("/mnt/49c617b2-221d-486c-9542-4ff0dc297048/kidney/kidney_segmentation/new_tubule_rois")
 

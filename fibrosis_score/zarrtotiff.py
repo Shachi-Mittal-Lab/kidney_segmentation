@@ -10,11 +10,11 @@ from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
 
 # image to visualize
-zarr_path = Path("/home/riware/Desktop/loose_files/kpmp_regions/35e623b2-c9e8-4098-85fb-1489d04fc41d_S-2006-003982_TRI_2of2.zarr")
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/nuclei_cellpose_testing/HM-1-A_112455_region.zarr")
 zarr_folder = zarr_path.parent
 zarr_name = zarr_path.stem
-raw_path = zarr_path / "raw" / "s0"
-identifier = "zoom"
+raw_path = zarr_path / "raw" / "s1"
+identifier = "test"
 
 # colors for overlay
 red = [(0, 0, 0, 0), (1, 0, 0, 1)]
@@ -82,7 +82,7 @@ raw = open_ds(raw_path)
 # roi = Roi((10000,47000), (3000,3000)) * raw.voxel_size  # 03f9da88-1dbd-44f3-8a2a-dbefe629898b_S-2308-002019_TRI_1of2 region 0
 # roi = Roi((17500,43500), (3000,3000)) * raw.voxel_size  # 03f9da88-1dbd-44f3-8a2a-dbefe629898b_S-2308-002019_TRI_1of2 region 1
 #roi = Roi((19500,53250), (3000,3000)) * raw.voxel_size  # 28c71a0d-6881-427e-a0e5-d9e0bed7d4a5_S-2406-003315_TRI_2of2 region 0
-roi = Roi((0,0), (20000,20000)) * raw.voxel_size  # 28c71a0d-6881-427e-a0e5-d9e0bed7d4a5_S-2406-003315_TRI_2of2 region 1
+roi = Roi((11000,12000), (3000,3000)) * raw.voxel_size  # 28c71a0d-6881-427e-a0e5-d9e0bed7d4a5_S-2406-003315_TRI_2of2 region 1
 
 
 

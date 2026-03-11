@@ -13,7 +13,7 @@ from funlib.persistence import Array
 from funlib.geometry import Coordinate, Roi
 
 # Tools
-from PIL import Image
+from PIL import Image, ImageOps
 import torch
 import numpy as np
 from skimage.morphology import (
@@ -25,6 +25,7 @@ from skimage.morphology import (
 from skimage.filters import gaussian
 from skimage.measure import label
 from pathlib import Path
+import cv2
 
 def model_prediction(
     mask: Array,
@@ -60,7 +61,6 @@ def model_prediction(
         process_function=process_block,
     )
     daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
-    print(f"patch size final: {patch_size_final}")
 
     return
 
@@ -78,12 +78,8 @@ def model_prediction_lsds(
     def process_block(block: daisy.Block):
         # in data slice
         inslices = s2_array._Array__slices(block.read_roi)
-        # it was [:, 0:512, 0:512]
-        # we want [0:512, 0:512, :]
-        #inslices = (inslices[1], inslices[2], inslices[0])
         img = Image.fromarray(s2_array[inslices])
         img_shape = img.size
-        print(f"Image shape: {img_shape}")
         img_px = int(img_shape[0])
         input = inp_transforms(img).unsqueeze(1).to(device)
         model.eval()
@@ -111,7 +107,6 @@ def model_prediction_lsds(
         process_function=process_block,
     )
     daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
-    print(f"patch size final: {patch_size_final}")
 
     return
 
@@ -132,9 +127,7 @@ def model_prediction_rgb(
         # we want [0:512, 0:512, :]
         inslices = (inslices[1], inslices[2], inslices[0])
         img = Image.fromarray(s2_array[inslices])
-        print(f"Input image shape for pt preds: {s2_array[inslices].shape}")
         input = inp_transforms_rgb(img).unsqueeze(0).to(device)
-        print(f"Final input dimenstions {input.shape}")
         with torch.no_grad():
             preds = model(input)
             preds = preds.squeeze().squeeze().cpu().detach().numpy()
@@ -182,6 +175,7 @@ def upsample(
     daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)
     return
 
+
 def tissuemask_upsample(
     fg_eroded: Array,
     fg_eroded_s0: Array,
@@ -211,32 +205,26 @@ def tissuemask_upsample(
 
 def id_tbm(
     tubule_mask: Array,
-    structuralcollagen_mask: Array,
-    fibrosis1_mask: Array, 
-    fibrosis2_mask: Array,
+    nuclei_mask: Array,
     tbm_mask: Array,
     s0_array: Array,
-    fg_eroded_s0: Array,
 ):
     # need to erode and dilate to generate a TBM class
     erode_kernel = disk(2, decomposition="sequence")
     dilate_kernel = disk(
-        15, decomposition="sequence"
+        7, decomposition="sequence"
     )  # sequence for computational efficiency
 
     def tbm_block(block: daisy.Block):
-        cluster_structural = structuralcollagen_mask[block.read_roi]
-        cluster_fibrosis1 = fibrosis1_mask[block.read_roi]
-        cluster_fibrosis2 = fibrosis2_mask[block.read_roi]
-        cluster_no_inflamm = cluster_structural + cluster_fibrosis1 + cluster_fibrosis2
+        nuclei = nuclei_mask[block.read_roi]
         tubules = tubule_mask[block.read_roi]
         eroded_tubules = binary_erosion(tubules, erode_kernel)
         tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
-        tbm = (tbm_tubule * ~eroded_tubules.astype(bool)) * cluster_no_inflamm
+        tbm = tbm_tubule * (1-eroded_tubules) * (1-nuclei)
         tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
         tbm_mask[block.write_roi] = tbm
 
-    block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * s0_array.voxel_size
     tbm_task = daisy.Task(
         "ID TBM",
         total_roi=s0_array.roi,
@@ -251,31 +239,25 @@ def id_tbm(
 
 def id_bc(
     fincap_mask: Array,
-    structuralcollagen_mask: Array,
-    fibrosis1_mask: Array,
-    fibrosis2_mask: Array,
+    nuclei_mask: Array,
     bc_mask: Array,
-    fg_eroded_s0: Array,
     s0_array: Array,
 ):
-    erode_kernel = disk(14, decomposition="sequence")
+    erode_kernel = disk(8, decomposition="sequence")
     dilate_kernel = disk(
-        51, decomposition="sequence"
+        25, decomposition="sequence"
     )  # sequence for computational efficiency
 
     def bc_block(block: daisy.Block):
         cap = fincap_mask[block.read_roi]
-        cluster0 = structuralcollagen_mask[block.read_roi]
-        cluster1 = fibrosis1_mask[block.read_roi]
-        cluster2 = fibrosis2_mask[block.read_roi]
-        cluster = cluster0 + cluster1 + cluster2
+        nuclei = nuclei_mask[block.read_roi]
         eroded_cap = binary_erosion(cap, erode_kernel)
         dilated_cap = binary_dilation(cap, dilate_kernel)
-        bc = (dilated_cap * (1 - eroded_cap)) * cluster
+        bc = (dilated_cap * (1 - eroded_cap)) * (1-nuclei)
         bc = gaussian(bc.astype(float), sigma=2.0) > 0.5
         bc_mask[block.write_roi] = bc
 
-    block_roi = Roi((0, 0), (3000, 3000)) * fg_eroded_s0.voxel_size
+    block_roi = Roi((0, 0), (3000, 3000)) * s0_array.voxel_size
     bc_task = daisy.Task(
         "ID Bowman's Capsule",
         total_roi=s0_array.roi,
@@ -351,6 +333,37 @@ def downsample_fibrosis(
     )
     daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
     
+def downsample_fibrosis_20x(
+        finfib_mask: Array,
+        abnormaltissue_mask: Array,
+):
+    downsample_factor = 4 # 20x to 5x
+
+    def downsample_block(block: daisy.Block):
+        s0_data = finfib_mask[block.read_roi]
+        new_shape = (
+            s0_data.shape[0] // downsample_factor,
+            downsample_factor,
+            s0_data.shape[1] // downsample_factor,
+            downsample_factor,
+        )
+        downsampled = s0_data.reshape(new_shape).mean(
+            axis=(1, 3)
+        )  # Average over grouped blocks
+        abnormaltissue_mask[block.write_roi] = downsampled
+
+    block_roi = Roi((0, 0), (3000, 3000)) * finfib_mask.voxel_size
+
+    downsample_task = daisy.Task(
+        "blockwise_downsample",
+        total_roi=finfib_mask.roi,
+        read_roi=block_roi,
+        write_roi=block_roi,
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=downsample_block,
+    )
+    daisy.run_blockwise(tasks=[downsample_task], multiprocessing=False)
 
 def remove_small_fib(
         finfib_mask: Array,
@@ -363,7 +376,7 @@ def remove_small_fib(
         fib = finfib_mask[block.read_roi]
         # remove small fib sections
         labeled = label(fib.astype(bool), connectivity=2)
-        filtered_fib = remove_small_objects(labeled, min_size=5000)
+        filtered_fib = remove_small_objects(labeled, max_size=2500)
         removed_areas = labeled.astype(bool) * (1-filtered_fib.astype(bool))
         smallfib_mask[block.write_roi] = removed_areas
         finfib_mask[block.write_roi] = filtered_fib.astype(bool)
@@ -498,3 +511,85 @@ def clean_visualization(
     )
     daisy.run_blockwise(tasks=[cleaning_task], multiprocessing=False)
 
+def model_prediction_cellpose(
+    mask: Array,
+    s0_array: Array,
+    patch_size_final: Array,
+    model,
+    task: str,
+):
+
+    def process_block(block: daisy.Block):
+        # in data slice
+        inslices = s0_array._Array__slices(block.read_roi)
+        # grayscale and invert img
+        img = Image.fromarray(s0_array[inslices])
+        img = ImageOps.invert(img.convert("L"))
+        arr = np.asarray(img) # X,Y,C
+        masks, flows, styles = model.eval(
+            arr, 
+            channels=[0, 0],        # single-channel grayscale
+            channel_axis=-1,        # last axis holds channels
+            z_axis=None,            # 2D image
+            normalize=True,
+        )
+        masks = masks > 0
+        mask[block.write_roi] = masks
+
+    pred_task = daisy.Task(
+        task,
+        total_roi=s0_array.roi,
+        read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
+        write_roi=Roi((0, 0), patch_size_final),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=process_block,
+    )
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    return
+
+def background_cluster(
+    bg_mask: Array,
+    clustering,
+    n_clusters,
+    patch_size_final,
+    s2_array: Array,
+    task: str,
+):
+    def process_block(block: daisy.Block):
+        # in data slice
+        inslices = s2_array._Array__slices(block.read_roi)
+        # grayscale & clahe
+        roi_gray = cv2.cvtColor(s2_array[inslices], cv2.COLOR_RGB2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(256, 256))
+        img_clahe = clahe.apply(roi_gray)  # apply to full grayscale image
+        roi_gray_flat = img_clahe.flatten()
+        # k means predict
+        roi_gray_flat = np.expand_dims(roi_gray_flat, axis=1)
+        prediction = clustering.predict(roi_gray_flat)
+        # order centers from clustering for ease of color reassignment
+        index = np.arange(0, n_clusters, 1).reshape(-1, 1)
+        centers = np.hstack((index, clustering.cluster_centers_))
+        ascending_centers = np.array(sorted(centers, key=lambda x: x[1]))
+        ordered_centers = ascending_centers[::-1]
+        new_order = ordered_centers[:, 0].astype(int).reshape(-1, 1)
+        mapping = np.array(
+            [x[1] for x in sorted(zip(new_order, index))], dtype=int
+        ).reshape(-1, 1)
+        # updated labels
+        class_labels = mapping[prediction].reshape(roi_gray.shape)
+        bg = class_labels == 0
+        filtered_bg = remove_small_objects(bg, max_size=100)
+        bg_mask[block.write_roi] = filtered_bg
+
+    pred_task = daisy.Task(
+        task,
+        total_roi=s2_array.roi,
+        read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
+        write_roi=Roi((0, 0), patch_size_final),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=process_block,
+    )
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    return

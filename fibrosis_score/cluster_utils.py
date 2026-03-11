@@ -34,7 +34,6 @@ def prepare_clustering(gray_cluster_centers):
 
 
 def grayscale_cluster(
-    patchpath,
     patch_raw,
     voxel_roi,
     clustering,

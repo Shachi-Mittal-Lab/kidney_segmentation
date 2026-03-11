@@ -60,7 +60,7 @@ def varied_vessel_dilation(
         # Compute object size
         object_size = np.sum(obj_mask)
         # Define dilation size (larger for bigger objects)
-        dilation_radius = base_size + int(np.log1p(5000 * object_size))  # Log-based scaling
+        dilation_radius = base_size + int(np.log1p(2500 * object_size))  # Log-based scaling
         # Create structuring element (disk for circular dilation)
         struct_elem = disk(dilation_radius, decomposition="sequence")
         # Dilate the object and store in the output array

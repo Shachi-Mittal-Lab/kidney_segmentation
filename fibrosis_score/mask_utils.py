@@ -82,8 +82,8 @@ def prepare_seg_masks(zarr_path, ref_array, magnification):
     """
     tubule_mask = prepare_mask(zarr_path, ref_array, f"tubule_{magnification}")
     vessel_mask = prepare_mask(zarr_path, ref_array, f"vessel_{magnification}")
-    cap_mask = prepare_mask(zarr_path, ref_array, f"cap_{magnification}")
-    return tubule_mask, vessel_mask, cap_mask
+    nuclei_mask = prepare_mask(zarr_path, ref_array, f"nuclei_{magnification}")
+    return tubule_mask, vessel_mask, nuclei_mask
 
 def prepare_omniseg_masks(zarr_path, ref_array):
     """
