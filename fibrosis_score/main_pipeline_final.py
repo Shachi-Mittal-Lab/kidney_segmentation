@@ -152,10 +152,10 @@ def run_full_pipeline(
     print("Predicting Cortex")
     # load model
     print_gpu_usage(device)
-    model = torch.load("model_unet_dataset12_vessel0_LSDs_final.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_dataset12_vessel0_LSDs_final.pt", weights_only=False)
+    model = torch.load("model_unet_cortexdataset1_5x_LSDs_final.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_cortexdataset1_5x_LSDs_final.pt", weights_only=False)
     print_gpu_usage(device)
-    model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head)
+    model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head, device, "ID Cortex")
 
 
     # size to feed to 10x u-nets in pixels

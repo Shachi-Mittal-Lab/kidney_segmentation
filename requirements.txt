@@ -3,13 +3,13 @@ matplotlib
 imagecodecs
 openslide-python
 openslide-bin
-dask
+dask==2025.7.0
 #"dask[distributed]"
 funlib.geometry @ git+https://github.com/funkelab/funlib.geometry.git
-funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git
+funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git@v0.6.1
 funlib.show.neuroglancer @ git+https://github.com/funkelab/funlib.show.neuroglancer.git
 daisy
-tifffile
+tifffile==2025.5.10
 scikit-image
 scikit-learn
 scipy
