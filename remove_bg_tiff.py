@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
-tiff_dir = Path("/media/mrl/Data/pipeline_connection/ndpis/bg_removal_testing")
+tiff_dir = Path("/home/riware/Desktop/mittal_lab/bg_removal_test_regions/original_imgs")
 
 def remove_trichrome_background(image_path, sat_thresh=30, val_thresh=210):
     """
@@ -56,7 +56,7 @@ def remove_trichrome_background(image_path, sat_thresh=30, val_thresh=210):
     
     print("Applying morphological cleanup...")
     # More aggressive morphological cleanup
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)) # was 7,7
     tissue_mask = cv2.morphologyEx(tissue_mask, cv2.MORPH_CLOSE, kernel, iterations=3)
     tissue_mask = cv2.morphologyEx(tissue_mask, cv2.MORPH_OPEN, kernel, iterations=1)
     

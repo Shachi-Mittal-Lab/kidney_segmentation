@@ -14,6 +14,7 @@ from fibrosis_score.cluster_utils import prepare_clustering
 from fibrosis_score.pred_utils import pred_cortex
 from fibrosis_score.processing_utils import fill_holes, erode, varied_vessel_dilation, print_gpu_usage
 from fibrosis_score.daisy_blocks_nocluster import (
+    remove_bg,
     model_prediction_lsds,
     upsample,
     tissuemask_upsample,
@@ -104,7 +105,6 @@ def run_full_pipeline(
 
     print("Generating Cortex Mask")
     abnormaltissue_mask = prepare_mask(zarr_path, s3_array, "abnormaltissue")
-    fg_eroded = prepare_mask()
     cortex_mask = prepare_mask(zarr_path, s3_array, "desired_cortex") 
     cortex_mask_20x = prepare_mask(zarr_path, s1_array, "desired_cortex_20x")
 
@@ -122,9 +122,10 @@ def run_full_pipeline(
     patch_shape_final = Coordinate(1056, 1056)
     patch_size_final = patch_shape_final * s1_array.voxel_size  # size in nm
     bg_mask = prepare_mask(zarr_path, s1_array, "background")
-    # cluster out background
-    clustering, n_clusters = prepare_clustering(gray_cluster_centers)
-    background_cluster(bg_mask, clustering, n_clusters, patch_size_final, s1_array, "Identifying Background")
+    # remove background
+    remove_bg(bg_mask, 30, 210, patch_size_final, s1_array, "ID Background")
+    #clustering, n_clusters = prepare_clustering(gray_cluster_centers)
+    #background_cluster(bg_mask, clustering, n_clusters, patch_size_final, s1_array, "Identifying Background")
 
     print("Preparing Masks for Segmentation")
     # prepare histological segmentation mask locations in zarr (10x)
@@ -379,8 +380,8 @@ def run_full_pipeline(
     abnormaltissue = abnormaltissue.astype(bool)
     dask_abnormaltissue = dask.array.from_array(abnormaltissue)
     # apply 5x foreground mask to abnormal tissue mask
-    dask_abnormaltissue = dask_abnormaltissue * eroded_cortex_mask_5x.data
-    dask.array.store(dask_abnormaltissue, abnormaltissue_mask._source_data, compute=True)
+    #dask_abnormaltissue = dask_abnormaltissue * eroded_cortex_mask_5x.data
+    #dask.array.store(dask_abnormaltissue, abnormaltissue_mask._source_data, compute=True)
    
     print("Calculating Structural Collagen Overlay with Exclusion")
     # create final collagen exclusion overlay
@@ -459,9 +460,9 @@ def run_full_pipeline(
     total_inflammscore = (total_inflammpx / total_interstitiumpx) * 100 
 
     # calculate fibrosis score with abnormal tissue in 5x
-    abnormaltissuepx = dask.array.count_nonzero(abnormaltissue_mask.data)
-    tissuepx_5x = dask.array.count_nonzero(eroded_cortex_mask_5x.data)
-    total_alpers2_fibscore = abnormaltissuepx.compute() / tissuepx_5x.compute() * 100
+    #abnormaltissuepx = dask.array.count_nonzero(abnormaltissue_mask.data)
+    #tissuepx_5x = dask.array.count_nonzero(eroded_cortex_mask_5x.data)
+    #total_alpers2_fibscore = abnormaltissuepx.compute() / tissuepx_5x.compute() * 100
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -480,7 +481,7 @@ def run_full_pipeline(
         f.write(f"Final Dr. Setty Fibscore with Inflammation Included: {total_drsetty_fibscore_winflamm}\n")
         f.write(f"Final Alpers 1 Score: {total_alpers1_fibscore}\n")
         f.write(f"Final Alpers 1 Score with Inflammation Included: {total_alpers1_fibscore_winflamm}\n")
-        f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore}\n")
+        #f.write(f"Final Alpers 2 Score: {total_alpers2_fibscore}\n")
         f.write(f"Final Inflammscore: {total_inflammscore}\n")
         f.write(f"Pipeline time: {hours}h {minutes}m {seconds:.2f}s")
         f.close()

@@ -593,3 +593,48 @@ def background_cluster(
     )
     daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
     return
+
+def remove_bg(
+    bg_mask: Array,
+    sat_thresh: int,
+    val_thresh: int,
+    patch_size_final,
+    s1_array: Array,
+    task: str,
+):
+    def process_block(block: daisy.Block):
+        # in data slice
+        inslices = s1_array._Array__slices(block.read_roi)
+        # grayscale & clahe
+
+        # Convert to HSV
+        hsv = cv2.cvtColor(s1_array[inslices], cv2.COLOR_BGR2HSV)
+        s = hsv[:, :, 1]  # Saturation channel
+        v = hsv[:, :, 2]  # Value channel
+        
+        # Identify background: low saturation AND high brightness
+        background_mask = (s < sat_thresh) & (v > val_thresh)
+        
+        # Need uint8 for morphological operations
+        background_mask_uint8 = background_mask.astype(np.uint8) * 255
+        
+        # Morphological cleanup
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        background_mask_uint8 = cv2.morphologyEx(background_mask_uint8, cv2.MORPH_OPEN, kernel, iterations=1)
+        background_mask_uint8 = cv2.morphologyEx(background_mask_uint8, cv2.MORPH_CLOSE, kernel, iterations=3)
+        
+        # Convert back to binary (True=background, False=tissue)
+        background_mask_binary = background_mask_uint8 > 127
+        bg_mask[block.write_roi] = background_mask_binary
+
+    pred_task = daisy.Task(
+        task,
+        total_roi=s1_array.roi,
+        read_roi=Roi((0, 0), patch_size_final),  # (offset, shape)
+        write_roi=Roi((0, 0), patch_size_final),
+        read_write_conflict=False,
+        num_workers=2,
+        process_function=process_block,
+    )
+    daisy.run_blockwise(tasks=[pred_task], multiprocessing=False)
+    return
