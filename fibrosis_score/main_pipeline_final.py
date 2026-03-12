@@ -104,8 +104,19 @@ def run_full_pipeline(
 
     print("Generating Cortex Mask")
     abnormaltissue_mask = prepare_mask(zarr_path, s3_array, "abnormaltissue")
+    fg_eroded = prepare_mask()
     cortex_mask = prepare_mask(zarr_path, s3_array, "desired_cortex") 
     cortex_mask_20x = prepare_mask(zarr_path, s1_array, "desired_cortex_20x")
+
+    print("Generating Foreground Masks")
+    fmask, filled_fmask, eroded_fmask, abnormaltissue_mask = prepare_foreground_masks(zarr_path, s3_array)
+    mask = foreground_mask(s3_array.data, threshold)
+    store_fgbg = zarr.open(zarr_path / "mask" / "foreground")
+    dask.array.store(mask, store_fgbg)
+
+    # fill holes & erode foreground mask
+    filled_fmask._source_data[:] = fill_holes(mask, filldisk=31, shrinkdisk=28)
+    eroded_fmask._source_data[:] = erode(filled_fmask._source_data[:], shrinkdisk=40)
 
     # Create background mask for clustering
     patch_shape_final = Coordinate(1056, 1056)
