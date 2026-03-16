@@ -78,18 +78,21 @@ def run_full_pipeline(
     print(input_filename)
     start_time = time.time()
 
+    # define image padding for u-net predictions
+    padding = (5000, 0, 0)
+
     # convert file to zarr if not a zarr
     if input_file_ext == ".ndpi":
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
         # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
-        ndpi_to_zarr_padding(input_path, zarr_path, offset, axis_names)
+        ndpi_to_zarr_padding(input_path, zarr_path, offset, axis_names, padding)
 
     elif input_file_ext == ".svs": 
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
         # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
-        svs_to_zarr_padding(input_path, zarr_path, offset, axis_names)
+        svs_to_zarr_padding(input_path, zarr_path, offset, axis_names, padding)
 
     elif input_file_ext == ".zarr":
         zarr_path = input_path
@@ -164,8 +167,8 @@ def run_full_pipeline(
     print("Predicting Cortex")
     # load model
     print_gpu_usage(device)
-    model = torch.load("model_unet_cortexdataset1_5x_LSDs_final.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_cortexdataset1_5x_LSDs_final.pt", weights_only=False)
+    model = torch.load("model_rachel_14mar26_epoch2754.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_cortexdataset1_5x_LSDs_2754.pt", weights_only=False)
     print_gpu_usage(device)
     model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head, device, "ID Cortex")
 

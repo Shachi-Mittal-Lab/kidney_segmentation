@@ -3,7 +3,7 @@ from pathlib import Path
 # inputs #
 
 # file inputs
-input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/convert_to_zarr") #Eric edit
+input_path = Path("/media/mrl/Data/pipeline_connection/ndpis/cortex_model_calcs_16Mar2026") #Eric edit
 
 #Eric edit:no pngs before it was created 
 png_path = Path("/home/riware@netid.washington.edu/Documents/kidney/kidney_segmentation/omni-seg/input")
