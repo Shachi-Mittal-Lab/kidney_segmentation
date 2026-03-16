@@ -1,5 +1,5 @@
 # Repo Tools
-from fibrosis_score.zarr_utils import ndpi_to_zarr, svs_to_zarr
+from fibrosis_score.zarr_utils import ndpi_to_zarr_padding, svs_to_zarr_padding
 from fibrosis_score.mask_utils import (
     prepare_mask,
     prepare_foreground_masks,
@@ -83,13 +83,13 @@ def run_full_pipeline(
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
         # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
-        ndpi_to_zarr(input_path, zarr_path, offset, axis_names)
+        ndpi_to_zarr_padding(input_path, zarr_path, offset, axis_names)
 
     elif input_file_ext == ".svs": 
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
         # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
-        svs_to_zarr(input_path, zarr_path, offset, axis_names)
+        svs_to_zarr_padding(input_path, zarr_path, offset, axis_names)
 
     elif input_file_ext == ".zarr":
         zarr_path = input_path

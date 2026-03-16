@@ -376,7 +376,7 @@ def remove_small_fib(
         fib = finfib_mask[block.read_roi]
         # remove small fib sections
         labeled = label(fib.astype(bool), connectivity=2)
-        filtered_fib = remove_small_objects(labeled, max_size=2500)
+        filtered_fib = remove_small_objects(labeled, max_size=1200) # was 2500
         removed_areas = labeled.astype(bool) * (1-filtered_fib.astype(bool))
         smallfib_mask[block.write_roi] = removed_areas
         finfib_mask[block.write_roi] = filtered_fib.astype(bool)

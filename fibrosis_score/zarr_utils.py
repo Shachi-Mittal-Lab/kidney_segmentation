@@ -269,7 +269,9 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
 
 def svs_to_zarr(svs_path, zarr_path, offset, axis_names):
     # open highest pyramid level
+    print("Opening SVS")
     dask_array0, x_res, y_res, units = opensvs(svs_path, 0)
+    print("SVS opened")
     s0_shape = dask_array0.shape
     # units are natively ("nm", "nm") so no need to convert to get voxel size
     # convert to integer and calculate for each pyramid level
@@ -400,6 +402,154 @@ def svs_to_zarr(svs_path, zarr_path, offset, axis_names):
                 dask.array.store(dask_array, store_rgb)
     return print("svs conversion complete")
 
+def svs_to_zarr_padding(svs_path, zarr_path, offset, axis_names, padding):
+    # open highest pyramid level
+    print("Opening SVS")
+    dask_array0, x_res, y_res, units = opensvs(svs_path, 0)
+    print("SVS opened")
+    s0_shape = dask_array0.shape
+    offset_plus_channels = offset + (0,)
+    s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding) + Coordinate(offset_plus_channels)
+    # units are natively ("nm", "nm") so no need to convert to get voxel size
+    # convert to integer and calculate for each pyramid level
+    voxel_size0 = Coordinate(int(x_res), int(y_res))
+    # format data as funlib dataset
+    raw = prepare_ds(
+        zarr_path / "raw" / "s0",
+        s0_shape_padded,
+        offset,
+        voxel_size0,
+        axis_names,
+        units,
+        mode="w",
+        dtype=np.uint8,
+        fill_value=255
+    )
+    # storage info
+    store_rgb = zarr.open(zarr_path / "raw" / "s0")
+    dask_array = dask_array0.rechunk(raw.data.chunksize)
+
+    with ProgressBar():
+        dask.array.store(dask_array, store_rgb)
+
+    for i in range(1, 4):
+        # open the ndpi with openslide for info and tifffile as zarr
+        try:
+            dask_array, x_res, y_res, _ = opensvs(svs_path, i)
+            # units are natively ("nm", "nm") so no need to convert to get voxel size
+            # convert to integer and calculate for each pyramid level
+            voxel_size0 = Coordinate(int(x_res), int(y_res))
+            expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
+            expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i, 3))
+            print(f"expected image shape: {expected_shape}")
+            print(f"expected padded shape: {expected_padded_shape}")
+            print(f"actual shape: {dask_array.shape}")
+
+            # check shape is expected shape
+            if dask_array.shape == expected_shape:
+                print("correct shape")
+                # format data as funlib dataset
+                raw = prepare_ds(
+                    zarr_path / "raw" / f"s{i}",
+                    expected_padded_shape,
+                    offset,
+                    voxel_size,
+                    axis_names,
+                    units,
+                    mode="w",
+                    dtype=np.uint8,
+                    fill_value=255
+                )
+                # storage info
+                print("Rechunking")
+                dask_array = dask_array.rechunk(raw.data.chunksize)
+                print("Saving")
+                store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
+                with ProgressBar():
+                    dask.compute(store_raw)
+
+            else:
+                voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
+                # format data as funlib dataset
+                raw = prepare_ds(
+                    zarr_path / "raw" / f"s{i}",
+                    expected_padded_shape,
+                    offset,
+                    voxel_size,
+                    axis_names,
+                    units,
+                    mode="w",
+                    dtype=np.uint8,
+                    fill_value=255
+                )
+                # storage info
+                store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
+                prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
+                print(f"chunk shape: {prev_layer.chunk_shape}")
+
+                # mean downsampling
+                print("Downsampling previous layer")
+                factors = {0: 2, 1: 2}
+                try:
+                    dask_array = coarsen(mean, prev_layer.data, factors)
+                except ValueError as e:
+                    new_shape = tuple(
+                        (
+                            (prev_layer.data.shape[i] // factors[i]) * factors[i]
+                            if i in factors
+                            else prev_layer.data.shape[i]
+                        )
+                        for i in range(prev_layer.data.ndim)
+                    )
+                    dask_array_cropped = prev_layer.data[:new_shape[0], :new_shape[1], :new_shape[2]]
+                    dask_array = coarsen(mean, dask_array_cropped, factors)
+                # save to zarr
+                print("Saving")
+                store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
+                with ProgressBar():
+                    dask.compute(store_raw)
+        except TypeError as e:
+            print(f"for layer {i}: {e}")
+            print(f"Layer {i} does not exist.  Generating.")
+            prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
+            voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
+            expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
+            print(f"expected padded shape: {expected_padded_shape}")
+            # format data as funlib dataset
+            raw = prepare_ds(
+                zarr_path / "raw" / f"s{i}",
+                expected_padded_shape,
+                offset,
+                voxel_size,
+                axis_names,
+                units,
+                mode="w",
+                dtype=np.uint8,
+                fill_value=255
+            )
+            # storage info
+            store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
+            prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
+            print(f"chunk shape: {prev_layer.chunk_shape}")
+            # mean downsampling
+            factors = {0: 2, 1: 2}
+            try:
+                dask_array = coarsen(mean, prev_layer.data, factors)
+            except ValueError as e:
+                new_shape = tuple(
+                    (
+                        (prev_layer.data.shape[i] // factors[i]) * factors[i]
+                        if i in factors
+                        else prev_layer.data.shape[i]
+                    )
+                    for i in range(prev_layer.data.ndim)
+                )
+                dask_array_cropped = prev_layer.data[:new_shape[0], :new_shape[1], :new_shape[2]]
+                dask_array = coarsen(mean, dask_array_cropped, factors)
+            # save to zarr
+            with ProgressBar():
+                dask.array.store(dask_array, store_rgb)
+    return print("SVS conversion complete")
 
 def omniseg_to_zarr(omniseg_path, zarr_mask, voxel_roi):
     roimask = np.load(omniseg_path)
