@@ -79,7 +79,7 @@ def run_full_pipeline(
     start_time = time.time()
 
     # define image padding for u-net predictions
-    padding = (5000, 0, 0)
+    padding = (5000, 5000, 0)
 
     # convert file to zarr if not a zarr
     if input_file_ext == ".ndpi":
