@@ -85,13 +85,13 @@ def run_full_pipeline(
     if input_file_ext == ".ndpi":
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
-        # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
+        # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, 2.5x, and rechunk
         ndpi_to_zarr_padding(input_path, zarr_path, offset, axis_names, padding)
 
     elif input_file_ext == ".svs": 
         # name zarr/home/amninder/Desktop/project/Folder_2/subfolder
         zarr_path = input_path.with_suffix(".zarr")
-        # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, and rechunk
+        # convert ndpi to zarr array levels 40x, 20x, 10x, 5x, 2.5x, and rechunk
         svs_to_zarr_padding(input_path, zarr_path, offset, axis_names, padding)
 
     elif input_file_ext == ".zarr":

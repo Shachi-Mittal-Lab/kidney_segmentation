@@ -4,6 +4,7 @@ import numpy as np
 import PIL
 from PIL import Image
 from typing import Tuple, List
+import tifffile
 
 PIL.Image.MAX_IMAGE_PIXELS = 1000000000
 
@@ -21,7 +22,6 @@ def split_image_into_patches_with_overlap(image: np.ndarray, patch_size: int = 3
     """
     height, width = image.shape[:2]
     
-    # Calculate stride (step size between patches)
     stride = int(patch_size * (1 - overlap))
     
     patches = []
@@ -65,6 +65,7 @@ def process_image_pair(image_path: Path, mask_path: Path, output_folder: Path,
     """
     Process a single image-mask pair by splitting into overlapping patches.
     Only saves patches where at least positive_threshold of mask pixels are positive.
+    Masks are binarized (0/1). Both images and masks are saved with tifffile.
     
     Args:
         image_path: Path to the original image
@@ -93,31 +94,29 @@ def process_image_pair(image_path: Path, mask_path: Path, output_folder: Path,
         return
     
     # Extract identification string from filename
-    # Format: im_{identification string}_5x.tif or.tiff
-    filename = image_path.stem  # Remove extension
+    filename = image_path.stem
     id_string = filename.replace('im_', '').replace('_5x', '')
     
     # Create output subfolder
     output_subfolder = output_folder / folder_name
     output_subfolder.mkdir(parents=True, exist_ok=True)
     
-    # Save each patch pair (only if mask has sufficient positive pixels)
     saved_count = 0
     skipped_count = 0
     
     for (img_patch, row, col, idx), (mask_patch, _, _, _) in zip(image_patches, mask_patches):
-        # Check if mask has sufficient positive pixels
         if not has_sufficient_positive_pixels(mask_patch, positive_threshold):
             skipped_count += 1
             continue
         
-        # Create new filenames with patch index (maintain original extensions)
         new_image_name = f"im_{id_string}_5x_patch{idx}.tif"
         new_mask_name = f"im_{id_string}_5x_mask_patch{idx}.tiff"
         
-        # Save patches
-        Image.fromarray(img_patch).save(output_subfolder / new_image_name)
-        Image.fromarray(mask_patch).save(output_subfolder / new_mask_name)
+        # Binarize mask and save both with tifffile
+        binary_mask_patch = (mask_patch != 0).astype(np.uint8)
+        tifffile.imwrite(str(output_subfolder / new_image_name), img_patch)
+        tifffile.imwrite(str(output_subfolder / new_mask_name), binary_mask_patch)
+        
         saved_count += 1
     
     total_patches = len(image_patches)
@@ -140,12 +139,9 @@ def process_folders(input_root: str, output_root: str, folder_names: List[str],
     input_path = Path(input_root)
     output_path = Path(output_root)
     
-    # Create output root if it doesn't exist
     output_path.mkdir(parents=True, exist_ok=True)
     
     total_processed = 0
-    total_patches_saved = 0
-    total_patches_skipped = 0
     
     for folder_name in folder_names:
         folder_path = input_path / folder_name
@@ -157,21 +153,17 @@ def process_folders(input_root: str, output_root: str, folder_names: List[str],
         print(f"\nProcessing folder: {folder_name}")
         print(f"Settings: patch_size={patch_size}px, overlap={overlap*100}%, positive_threshold={positive_threshold*100}%")
         
-        # Find all image files (not masks) - images end with _5x.tif or _5x.tiff
         image_files = sorted([f for f in folder_path.glob("im_*_5x.tif") 
-                             if not f.stem.endswith("_mask")])
+                             if not f.stem.endswith("_corticaltissuemask")])
         
         for image_path in image_files:
-            # Construct corresponding mask path
-            # Mask has format: im_{id}_5x_mask.tiff (note:.tiff not.tif)
-            mask_name = image_path.stem + "_mask.tiff"
+            mask_name = image_path.stem + "_corticaltissuemask.tiff"
             mask_path = folder_path / mask_name
             
             if not mask_path.exists():
                 print(f"Warning: Mask not found for {image_path.name}, skipping...")
                 continue
             
-            # Process the pair
             process_image_pair(image_path, mask_path, output_path, folder_name, 
                              patch_size, overlap, positive_threshold)
             total_processed += 1
@@ -185,15 +177,12 @@ def process_folders(input_root: str, output_root: str, folder_names: List[str],
     print(f"  - Positive pixel threshold: {positive_threshold*100}%")
     print(f"Output location: {output_path.absolute()}")
 
-# Example usage
 if __name__ == "__main__":
-    # Configure these paths
-    INPUT_ROOT = "/home/riware/Desktop/mittal_lab/cortex_annotations_formatted"  # Parent folder containing the 4 folders
-    OUTPUT_ROOT = "/home/riware/Desktop/mittal_lab/cortex_annotations_formatted_split_3"  # Where split images will be saved
-    FOLDER_NAMES = ["he", "pas", "sil", "tri"]  # Your 4 folder names
-    PATCH_SIZE = 3000  # Size of square patches
-    OVERLAP = 0.5  # 50% overlap
-    POSITIVE_THRESHOLD = 0.15  # 10% of pixels must be positive
+    INPUT_ROOT = "/home/riware/Desktop/mittal_lab/cortex_annotations_formatted_split_31Mar2026"
+    OUTPUT_ROOT = "/home/riware/Desktop/mittal_lab/cortex_annotations_formatted_patched3000_10pos_02Apr2026"
+    FOLDER_NAMES = ["he", "pas", "sil", "tri"]
+    PATCH_SIZE = 3000
+    OVERLAP = 0.0
+    POSITIVE_THRESHOLD = 0.05
     
-    # Run the processing
     process_folders(INPUT_ROOT, OUTPUT_ROOT, FOLDER_NAMES, PATCH_SIZE, OVERLAP, POSITIVE_THRESHOLD)

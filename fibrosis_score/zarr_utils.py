@@ -43,7 +43,7 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
     with ProgressBar():
         dask.compute(store_raw)
 
-    for i in range(1, 4):
+    for i in range(1, 5):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
@@ -168,7 +168,7 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
     with ProgressBar():
         dask.compute(store_raw)
 
-    for i in range(1, 4):
+    for i in range(1, 5):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
@@ -294,7 +294,7 @@ def svs_to_zarr(svs_path, zarr_path, offset, axis_names):
     with ProgressBar():
         dask.array.store(dask_array, store_rgb)
 
-    for i in range(1, 4):
+    for i in range(1, 5):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = opensvs(svs_path, i)
@@ -432,7 +432,7 @@ def svs_to_zarr_padding(svs_path, zarr_path, offset, axis_names, padding):
     with ProgressBar():
         dask.array.store(dask_array, store_rgb)
 
-    for i in range(1, 4):
+    for i in range(1, 5):
         # open the ndpi with openslide for info and tifffile as zarr
         try:
             dask_array, x_res, y_res, _ = opensvs(svs_path, i)
