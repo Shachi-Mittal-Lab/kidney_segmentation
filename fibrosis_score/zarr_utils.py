@@ -134,14 +134,12 @@ def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
                 dask.compute(store_raw)
     return print("npdi conversion complete")
 
-def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
+def ndpi_to_zarr(ndpi_path, zarr_path, offset, axis_names):
     # open highest pyramid level
     print("Opening NDPI")
     dask_array0, x_res, y_res, units = openndpi(ndpi_path, 0)
     print("NDPI Opened")
-    offset_plus_channels = offset + (0,)
     s0_shape = dask_array0.shape
-    s0_shape_padded = Coordinate(dask_array0.shape) + Coordinate(padding) + Coordinate(offset_plus_channels)
     # native units are listed as "centimeter" but are 
     # px/cm so manually reassigning to nm
     units = ("nm", "nm")
@@ -150,16 +148,14 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
     # format data as funlib dataset
     raw = prepare_ds(
         zarr_path / "raw" / "s0",
-        s0_shape_padded,
+        dask_array0.shape,
         offset,
         voxel_size0,
         axis_names,
         units,
         mode="w",
         dtype=np.uint8,
-        fill_value=255
     )
-
     # storage info
     dask_array = dask_array0.rechunk(raw.data.chunksize)
     store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
@@ -174,28 +170,23 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i)
             # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
-            expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
             expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
-            print(f"expected image shape: {expected_shape}")
-            print(f"expected padded shape: {expected_padded_shape}")
+            print(f"expected shape: {expected_shape}")
             print(f"actual shape: {dask_array.shape}")
 
             # check shape is expected shape 
             if dask_array.shape == expected_shape:
                 print("correct shape")
-                # format data as funlib  with padding
-
+                # format data as funlib dataset
                 raw = prepare_ds(
                     zarr_path / "raw" / f"s{i}",
-                    expected_padded_shape,
+                    dask_array.shape,
                     offset,
                     voxel_size,
                     axis_names,
                     units,
                     mode="w",
                     dtype=np.uint8,
-                    fill_value=255
-
                 )
                 # storage info
                 print("Rechunking")
@@ -205,28 +196,29 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
                 with ProgressBar():
                     dask.compute(store_raw)
 
+        
             else:
                 voxel_size = tuple((voxel_size0[0] * 2**i, voxel_size0[0] * 2**i))
                 # format data as funlib dataset
                 raw = prepare_ds(
                     zarr_path / "raw" / f"s{i}",
-                    expected_padded_shape,
+                    expected_shape,
                     offset,
                     voxel_size,
                     axis_names,
                     units,
                     mode="w",
                     dtype=np.uint8,
-                    fill_value=255
-
                 )
                 # storage info
                 prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
                 print(f"chunk shape: {prev_layer.chunk_shape}")
 
-                # mean downsampling
+                # mean downsampling — trim spatial dims to be divisible by 2 before coarsening
                 print("Downsampling Previous Layer")
-                dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
+                prev_data = prev_layer.data
+                prev_data = prev_data[:prev_data.shape[0] // 2 * 2, :prev_data.shape[1] // 2 * 2]
+                dask_array = coarsen(mean, prev_data, {0: 2, 1: 2})
 
                 # save to zarr
                 print("Saving")
@@ -239,28 +231,28 @@ def ndpi_to_zarr_padding(ndpi_path, zarr_path, offset, axis_names, padding):
             dask_array, x_res, y_res, _ = openndpi(ndpi_path, i-1)
             # grab resolution in px/cm, convert to nm/px, calculate for each pyramid level
             voxel_size = Coordinate(int(1 / x_res * 1e7) * 2**i, int(1 / y_res * 1e7) * 2**i)
-            expected_padded_shape = tuple((s0_shape_padded[0] // 2**i, s0_shape_padded[1] // 2**i,3))
-            print(f"expected padded shape: {expected_padded_shape}")
+            expected_shape = tuple((s0_shape[0] // 2**i, s0_shape[1] // 2**i,3))
+            print(f"expected shape: {expected_shape}")
 
             # format data as funlib dataset
             raw = prepare_ds(
                 zarr_path / "raw" / f"s{i}",
-                expected_padded_shape,
+                expected_shape,
                 offset,
                 voxel_size,
                 axis_names,
                 units,
                 mode="w",
                 dtype=np.uint8,
-                fill_value=255
-
             )
             # storage info
             store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
             prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
             print(f"chunk shape: {prev_layer.chunk_shape}")
-            # mean downsampling
-            dask_array = coarsen(mean, prev_layer.data, {0: 2, 1: 2})
+            # mean downsampling — trim spatial dims to be divisible by 2 before coarsening
+            prev_data = prev_layer.data
+            prev_data = prev_data[:prev_data.shape[0] // 2 * 2, :prev_data.shape[1] // 2 * 2]
+            dask_array = coarsen(mean, prev_data, {0: 2, 1: 2})
             # save to zarr
             store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
             with ProgressBar():
@@ -487,27 +479,18 @@ def svs_to_zarr_padding(svs_path, zarr_path, offset, axis_names, padding):
                 prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
                 print(f"chunk shape: {prev_layer.chunk_shape}")
 
-                # mean downsampling
+                # mean downsampling — trim spatial dims to be divisible by 2 before coarsening
                 print("Downsampling previous layer")
-                factors = {0: 2, 1: 2}
-                try:
-                    dask_array = coarsen(mean, prev_layer.data, factors)
-                except ValueError as e:
-                    new_shape = tuple(
-                        (
-                            (prev_layer.data.shape[i] // factors[i]) * factors[i]
-                            if i in factors
-                            else prev_layer.data.shape[i]
-                        )
-                        for i in range(prev_layer.data.ndim)
-                    )
-                    dask_array_cropped = prev_layer.data[:new_shape[0], :new_shape[1], :new_shape[2]]
-                    dask_array = coarsen(mean, dask_array_cropped, factors)
+                prev_data = prev_layer.data
+                prev_data = prev_data[:prev_data.shape[0] // 2 * 2, :prev_data.shape[1] // 2 * 2]
+                dask_array = coarsen(mean, prev_data, {0: 2, 1: 2})
+
                 # save to zarr
                 print("Saving")
                 store_raw = dask.array.store(dask_array, raw._source_data, compute=False)
                 with ProgressBar():
                     dask.compute(store_raw)
+
         except TypeError as e:
             print(f"for layer {i}: {e}")
             print(f"Layer {i} does not exist.  Generating.")
@@ -531,24 +514,15 @@ def svs_to_zarr_padding(svs_path, zarr_path, offset, axis_names, padding):
             store_rgb = zarr.open(zarr_path / "raw" / f"s{i}")
             prev_layer = open_ds(zarr_path / "raw" / f"s{i-1}")
             print(f"chunk shape: {prev_layer.chunk_shape}")
-            # mean downsampling
-            factors = {0: 2, 1: 2}
-            try:
-                dask_array = coarsen(mean, prev_layer.data, factors)
-            except ValueError as e:
-                new_shape = tuple(
-                    (
-                        (prev_layer.data.shape[i] // factors[i]) * factors[i]
-                        if i in factors
-                        else prev_layer.data.shape[i]
-                    )
-                    for i in range(prev_layer.data.ndim)
-                )
-                dask_array_cropped = prev_layer.data[:new_shape[0], :new_shape[1], :new_shape[2]]
-                dask_array = coarsen(mean, dask_array_cropped, factors)
+            # mean downsampling — trim spatial dims to be divisible by 2 before coarsening
+            prev_data = prev_layer.data
+            prev_data = prev_data[:prev_data.shape[0] // 2 * 2, :prev_data.shape[1] // 2 * 2]
+            dask_array = coarsen(mean, prev_data, {0: 2, 1: 2})
+
             # save to zarr
             with ProgressBar():
                 dask.array.store(dask_array, store_rgb)
+
     return print("SVS conversion complete")
 
 def omniseg_to_zarr(omniseg_path, zarr_mask, voxel_roi):
