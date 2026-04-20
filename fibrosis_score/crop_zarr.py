@@ -28,8 +28,8 @@ from funlib.persistence import open_ds, prepare_ds
 # USER INPUTS — edit these before running
 # ===========================================================================
 
-INPUT_DIR   = Path("/home/riware/Desktop/mittal_lab/zarrs_for_cropping")
-OUTPUT_DIR  = Path("/home/riware/Desktop/mittal_lab/zarrs_cropped")
+INPUT_DIR   = Path("/media/riware/Articuno/HM_cases_to_crop_10Apr2026")
+OUTPUT_DIR  = Path("/media/riware/Articuno/HM_cases_cropped_10Apr2026")
 PREVIEW_DS  = "raw/s4"
 DATASETS    = ["raw/s0", "raw/s1", "raw/s2", "raw/s3", "raw/s4"]
 NUM_WORKERS = 2

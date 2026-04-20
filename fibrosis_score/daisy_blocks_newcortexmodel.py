@@ -213,6 +213,7 @@ def id_tbm(
     tubule_mask: Array,
     nuclei_mask: Array,
     tbm_mask: Array,
+    cortex_mask: Array,
     s0_array: Array,
 ):
     # need to erode and dilate to generate a TBM class
@@ -224,9 +225,10 @@ def id_tbm(
     def tbm_block(block: daisy.Block):
         nuclei = nuclei_mask[block.read_roi]
         tubules = tubule_mask[block.read_roi]
+        cortex = cortex_mask[block.read_roi]
         eroded_tubules = binary_erosion(tubules, erode_kernel)
         tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
-        tbm = tbm_tubule * (1-eroded_tubules) * (1-nuclei)
+        tbm = tbm_tubule * (1-eroded_tubules) * (1-nuclei) * cortex
         tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
         tbm_mask[block.write_roi] = tbm
 
@@ -247,6 +249,7 @@ def id_bc(
     fincap_mask: Array,
     nuclei_mask: Array,
     bc_mask: Array,
+    cortex_mask: Array,
     s0_array: Array,
 ):
     erode_kernel = disk(8, decomposition="sequence")
@@ -259,7 +262,7 @@ def id_bc(
         nuclei = nuclei_mask[block.read_roi]
         eroded_cap = binary_erosion(cap, erode_kernel)
         dilated_cap = binary_dilation(cap, dilate_kernel)
-        bc = (dilated_cap * (1 - eroded_cap)) * (1-nuclei)
+        bc = (dilated_cap * (1 - eroded_cap)) * (1-nuclei) * cortex_mask
         bc = gaussian(bc.astype(float), sigma=2.0) > 0.5
         bc_mask[block.write_roi] = bc
 

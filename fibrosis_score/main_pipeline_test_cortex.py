@@ -118,14 +118,14 @@ def run_full_pipeline(
     patch_shape_final = Coordinate(1408, 1408)
     # size to feed to 5x u-net in nm
     patch_size_final = patch_shape_final * s3_array.voxel_size  # size in nm
-    # calculate size affected by padding of the 1056 x 1056 block
+    # calculate size affected by padding of the 1408 x 1408 block
     padding_affected_shape = Coordinate(280,280)
     padding_affected_size = padding_affected_shape * s3_array.voxel_size  # size in nm
 
     print("Predicting Cortex")
     # load model
     print_gpu_usage(device)
-    model = torch.load("model_rachel_14mar26_epoch2754.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_cortexdataset1_5x_LSDs_2754.pt", weights_only=False)
+    model = torch.load("model_unet_cortexdataset2_5x_LSDs_2600.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_cortexdataset2_5x_LSDs_2600.pt", weights_only=False)
     print_gpu_usage(device)
     model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head, device, "ID Cortex")
