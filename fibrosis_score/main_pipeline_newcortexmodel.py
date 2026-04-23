@@ -104,8 +104,8 @@ def run_full_pipeline(
     s1_array  = open_ds(zarr_path / "raw" / "s1") # 20x
 
     print("Generating Cortex Mask")
-    abnormaltissue_mask = prepare_mask(zarr_path, s3_array, "abnormaltissue")
     cortex_mask = prepare_mask(zarr_path, s3_array, "desired_cortex") 
+    cortex_mask_10x = prepare_mask(zarr_path, s2_array, "desired_cortex_10x")
     cortex_mask_20x = prepare_mask(zarr_path, s1_array, "desired_cortex_20x")
 
     print("Generating Foreground Masks")
@@ -152,13 +152,13 @@ def run_full_pipeline(
     print("Predicting Cortex")
     # load model
     print_gpu_usage(device)
-    model = torch.load("model_rachel_14mar26_epoch2754.pt", weights_only=False)
-    binary_head = torch.load("binaryhead_unet_cortexdataset1_5x_LSDs_2754.pt", weights_only=False)
+    model = torch.load("model_unet_cortexdataset2_5x_LSDs_5000.pt", weights_only=False)
+    binary_head = torch.load("binaryhead_unet_cortexdataset2_5x_LSDs_5000.pt", weights_only=False)
     print_gpu_usage(device)
     model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head, device, "ID Cortex")
 
     # fill holes & erode foreground mask
-    filled_cortex_mask._source_data[:] = fill_holes(cortex_mask, filldisk=31, shrinkdisk=28)
+    filled_cortex_mask._source_data[:] = fill_holes(cortex_mask._source_data[:], filldisk=31, shrinkdisk=28)
     eroded_cortex_mask._source_data[:] = erode(filled_cortex_mask._source_data[:], shrinkdisk=40)
     
     # size to feed to 10x u-nets in pixels
@@ -187,10 +187,6 @@ def run_full_pipeline(
     # remove small objects from cap mask
     cap_mask_10x._source_data[:] = remove_small_objects(
         cap_mask_10x._source_data[:].astype(bool), min_size=2000
-    )
-
-    cap_mask_10x._source_data[:] = remove_small_holes(
-        cap_mask_10x._source_data[:].astype(bool), area_threshold=5000
     )
 
     print("Predicting Tubules with U-Net")
@@ -222,7 +218,7 @@ def run_full_pipeline(
     model_prediction_lsds(vessel_mask_10x, s2_array, patch_size_final, padding_affected_size, model, binary_head, device, "Vessel ID")
     # remove small objects from vessel mask
     vessel_mask_10x._source_data[:] = remove_small_objects(
-        vessel_mask_10x._source_data[:].astype(bool), min_size=2000
+        vessel_mask_10x._source_data[:].astype(bool), min_size=500
     )
     # remove previous model from gpu
     del model 
@@ -253,20 +249,22 @@ def run_full_pipeline(
     # blockwise upsample from 5x to 10x
     upsampling_factor = s3_array.voxel_size / s2_array.voxel_size
     upsample(eroded_cortex_mask, eroded_cortex_mask_10x, upsampling_factor, s3_array, s2_array)
+    upsample(cortex_mask, cortex_mask_10x, upsampling_factor, s3_array, s2_array)
 
     # blockwise upsample from 5x to 20x
     upsampling_factor = s3_array.voxel_size / s1_array.voxel_size
     upsample(eroded_cortex_mask, eroded_cortex_mask_20x, upsampling_factor, s3_array, s1_array)
+    upsample(cortex_mask, cortex_mask_20x, upsampling_factor, s3_array, s1_array)
 
-    # apply edge tissue & cortex mask to remaining masks
+    # apply edge tissue & cortex mask to remaining masks to remove holes and undesired tissue
     print("Applying Foreground Cortex Mask to Masks")
-    fincap_mask_multiplication = fincap_mask.data * eroded_cortex_mask_10x.data
-    fincap_store = dask.array.store(fincap_mask_multiplication, cortexcorrected_cap_mask_10x._source_data, execute=False)
+    cap_mask_multiplication = cap_mask_10x.data * eroded_cortex_mask_10x.data * cortex_mask_10x.data
+    fincap_store = dask.array.store(cap_mask_multiplication, cortexcorrected_cap_mask_10x._source_data, execute=False)
     dask.compute(fincap_store)
-    tubule_mask_multiplication = tubule_mask.data * eroded_cortex_mask_10x.data
+    tubule_mask_multiplication = tubule_mask_10x.data * eroded_cortex_mask_10x.data * cortex_mask_10x.data
     tubule_store = dask.array.store(tubule_mask_multiplication, cortexcorrected_tubule_mask_10x._source_data, execute=False)
     dask.compute(tubule_store)
-    vessel_mask_multiplication = vessel_mask.data * eroded_cortex_mask_10x.data
+    vessel_mask_multiplication = vessel_mask_10x.data * eroded_cortex_mask_10x.data * cortex_mask_10x.data
     fin_vessel_store = dask.array.store(vessel_mask_multiplication, cortexcorrected_vessel_mask_10x._source_data, execute=False)
     dask.compute(fin_vessel_store)
 
@@ -281,7 +279,7 @@ def run_full_pipeline(
 
     print("Identifying TBM")
     # need to erode and dilate to generate a TBM class
-    id_tbm(tubule_mask, nuclei_mask, tbm_mask, eroded_cortex_mask_20x, s1_array)
+    id_tbm(tubule_mask, nuclei_mask, tbm_mask, eroded_cortex_mask_20x, cortex_mask_20x, s1_array)
 
     print("Identifying Bowman's Capsules")
     # need to erode and dilate to generate Bowman's Capsule class
@@ -290,6 +288,7 @@ def run_full_pipeline(
         nuclei_mask,
         bc_mask,
         eroded_cortex_mask_20x,
+        cortex_mask_20x,
         s1_array,
     )
 
@@ -314,7 +313,8 @@ def run_full_pipeline(
         * (1 - fincap_mask.data)
         * (1 - tbm_mask.data)
         * (1 - bc_mask.data)
-        * (cortex_mask_20x.data)
+        * cortex_mask_20x.data
+        * eroded_cortex_mask_20x.data
     )
     vessel_store = dask.array.store(vessel20xdilated_multiplication, vessel20xdilated._source_data, execute=False)
     dask.compute(vessel_store)
@@ -324,7 +324,8 @@ def run_full_pipeline(
     print("Calculating Fibrosis Mask")
     # create final fibrosis overlay: fibrosis1 + fibrosis2 from clustering - tuft, capsule, vessel, tubules
     finfib_multiplication = (
-        cortex_mask_20x.data
+        eroded_cortex_mask_20x.data
+        * cortex_mask_20x.data
         * (1 - nuclei_mask.data)
         * (1 - vessel_mask.data)
         * (1 - vessel20xdilated.data)
@@ -367,6 +368,7 @@ def run_full_pipeline(
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
         * (1 - vessel_mask.data)
+        * eroded_cortex_mask_20x.data
         * cortex_mask_20x.data
     )
     
@@ -384,7 +386,7 @@ def run_full_pipeline(
         * (1 - vessel_mask.data)
         * (1 - tubule_mask.data)
         * (1 - fincap_mask.data)
-        * (1 - vessel_mask.data)
+        * eroded_cortex_mask_20x.data
         * cortex_mask_20x.data
     )
     print("Saving Inflammation Mask")
@@ -409,9 +411,9 @@ def run_full_pipeline(
         f.writelines("# Interstitium Pixels per Block \n")
         f.close()
 
-    # Calculate fibrosis score at 40x
+    # Calculate fibrosis score at 20x
     print("Calculating Fibrosis Score")
-    calculate_fibscore(finfib_mask, cortex_mask_20x, vessel_mask, fincap_mask, zarr_path, input_filename, s1_array)
+    calculate_fibscore(finfib_mask, eroded_cortex_mask_20x, cortex_mask_20x, vessel_mask, fincap_mask, zarr_path, input_filename, s1_array)
     fibpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_fibpx.txt"), comments="#", dtype=int)
     tissuenoglomvesselpx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuenoglomvesselpx.txt", comments="#", dtype=int))
     tissuepx = np.loadtxt(Path(zarr_path.parent / f"{input_filename}_tissuepx.txt", comments="#", dtype=int))

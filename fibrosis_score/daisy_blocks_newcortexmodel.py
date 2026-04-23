@@ -177,6 +177,7 @@ def upsample(
         read_write_conflict=False,
         num_workers=2,
         process_function=upsample_block,
+        fit="shrink"
     )
     daisy.run_blockwise(tasks=[upsample_task], multiprocessing=False)
     return
@@ -213,6 +214,7 @@ def id_tbm(
     tubule_mask: Array,
     nuclei_mask: Array,
     tbm_mask: Array,
+    eroded_cortex_mask: Array,
     cortex_mask: Array,
     s0_array: Array,
 ):
@@ -225,10 +227,11 @@ def id_tbm(
     def tbm_block(block: daisy.Block):
         nuclei = nuclei_mask[block.read_roi]
         tubules = tubule_mask[block.read_roi]
+        eroded_cortex = eroded_cortex_mask[block.read_roi]
         cortex = cortex_mask[block.read_roi]
         eroded_tubules = binary_erosion(tubules, erode_kernel)
         tbm_tubule = binary_dilation(eroded_tubules, dilate_kernel)
-        tbm = tbm_tubule * (1-eroded_tubules) * (1-nuclei) * cortex
+        tbm = tbm_tubule * (1-eroded_tubules) * (1-nuclei) * eroded_cortex * cortex
         tbm = gaussian(tbm.astype(float), sigma=2.0) > 0.5
         tbm_mask[block.write_roi] = tbm
 
@@ -249,6 +252,7 @@ def id_bc(
     fincap_mask: Array,
     nuclei_mask: Array,
     bc_mask: Array,
+    eroded_cortex_mask: Array,
     cortex_mask: Array,
     s0_array: Array,
 ):
@@ -260,9 +264,11 @@ def id_bc(
     def bc_block(block: daisy.Block):
         cap = fincap_mask[block.read_roi]
         nuclei = nuclei_mask[block.read_roi]
+        eroded_cortex = eroded_cortex_mask[block.read_roi]
+        cortex = cortex_mask[block.read_roi]
         eroded_cap = binary_erosion(cap, erode_kernel)
         dilated_cap = binary_dilation(cap, dilate_kernel)
-        bc = (dilated_cap * (1 - eroded_cap)) * (1-nuclei) * cortex_mask
+        bc = (dilated_cap * (1 - eroded_cap)) * (1-nuclei) * eroded_cortex * cortex
         bc = gaussian(bc.astype(float), sigma=2.0) > 0.5
         bc_mask[block.write_roi] = bc
 
@@ -406,6 +412,7 @@ def remove_small_fib(
 def calculate_fibscore(
         finfib_mask: Array,
         cortex_eroded: Array,
+        cortex: Array,
         vessel_mask: Array,
         fincap_mask: Array,
         zarr_path: Path,
@@ -417,12 +424,14 @@ def calculate_fibscore(
         # in data
         fib = finfib_mask[block.read_roi]
         fg_er = cortex_eroded[block.read_roi]
+        fg = cortex[block.read_roi]
         vessel = vessel_mask[block.read_roi]
         cap = fincap_mask[block.read_roi]
         # calc positive pixels in mask
         fibpx = np.count_nonzero(fib)
-        fgpx = np.count_nonzero(fg_er)
-        fgnoglomvesselpx = fg_er * (1 - vessel) * (1 - cap)
+        complete_fg = fg_er * fg
+        fgpx = np.count_nonzero(complete_fg)
+        fgnoglomvesselpx = complete_fg * (1 - vessel) * (1 - cap)
         fgnoglomvesselpx = np.count_nonzero(fgnoglomvesselpx)
 
         # write to text file

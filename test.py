@@ -1,40 +1,25 @@
-from fibrosis_score.daisy_blocks import model_prediction_lsds
-from fibrosis_score.mask_utils import prepare_seg_masks
-from fibrosis_score.processing_utils import print_gpu_usage
+import tifffile
+import numpy as np
+from pathlib import Path
 
+from fibrosis_score.daisy_blocks_newcortexmodel import calculate_fibscore
 # Funke Lab Tools
-import daisy
 from funlib.persistence import open_ds, prepare_ds, Array
 from funlib.geometry import Coordinate, Roi
+from fibrosis_score.daisy_blocks_newcortexmodel import upsample
+from fibrosis_score.mask_utils_newcortexmodel import prepare_mask
 
-from pathlib import Path
-import torch
+zarr_path = Path("/media/mrl/Data/pipeline_connection/ndpis/test_new_pipeline_21Apr2026/21-2004 A-1-9 Trich - 2021-03-22 12.58.20.zarr")
+input_filename = zarr_path.stem
 
-# check there is a GPU
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
-print(f"Using {device}")
 
-zarr_path = Path("/home/riware/Desktop/mittal_lab/testing/21-2002 A-1-9 Trich - 2021-03-22 12.36.47.zarr")
+s2_array = open_ds(zarr_path / "raw" / "s2", mode='a')
+s3_array = open_ds(zarr_path / "raw" / "s3", mode='a')
 
-s2_array = open_ds(zarr_path / "raw" / "s2")
+eroded_cortex_5x = open_ds(zarr_path / "mask" / "cortex_eroded", mode='a')
+eroded_cortex_10x = prepare_mask(zarr_path, s2_array, "eroded_cortex_10x_new") 
 
-tubule_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
 
-# size to feed to u-nets in pixels
-patch_shape_final = Coordinate(1056, 1056)
-# size to feed to u-nets in nm
-patch_size_final = patch_shape_final * s2_array.voxel_size  # size in nm
-# calculate size affected by padding of the 1056 x 1056 block
-padding_affected_shape = Coordinate(208, 208)
-padding_affected_size = padding_affected_shape * s2_array.voxel_size  # size in nm
+upsampling_factor = s3_array.voxel_size / s2_array.voxel_size
 
-# load glom model
-print_gpu_usage(device)
-model = torch.load("model_unet_dataset5_01Jan2026_glom0_LSDs_final.pt", weights_only=False)
-binary_head = torch.load("binaryhead_unet_dataset5_01Jan2026_glom0_LSDs_final.pt", weights_only=False)
-print_gpu_usage(device)
-
-model_prediction_lsds(cap_mask_10x, s2_array, patch_size_final, padding_affected_size, model, binary_head, device, "Cap ID" )
+upsample(eroded_cortex_5x, eroded_cortex_10x, upsampling_factor, s3_array, s2_array)
