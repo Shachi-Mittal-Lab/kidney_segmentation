@@ -113,10 +113,6 @@ def run_full_pipeline(
     eroded_cortex_mask_10x = prepare_mask(zarr_path, s2_array, "eroded_cortex_10x")
     eroded_cortex_mask_20x = prepare_mask(zarr_path, s1_array, "eroded_cortex_20x")
 
-    # fill holes & erode foreground mask
-    filled_cortex_mask._source_data[:] = fill_holes(cortex_mask, filldisk=31, shrinkdisk=28)
-    eroded_cortex_mask._source_data[:] = erode(filled_cortex_mask._source_data[:], shrinkdisk=40)
-
     print("Preparing Masks for Segmentation")
     # prepare histological segmentation mask locations in zarr (10x)
     tubule_mask_10x, vessel_mask_10x, cap_mask_10x = prepare_seg_masks(zarr_path, s2_array, "10x")
@@ -161,6 +157,10 @@ def run_full_pipeline(
     print_gpu_usage(device)
     model_prediction_lsds(cortex_mask, s3_array, patch_size_final, padding_affected_size, model, binary_head, device, "ID Cortex")
 
+    # fill holes & erode foreground mask
+    filled_cortex_mask._source_data[:] = fill_holes(cortex_mask, filldisk=31, shrinkdisk=28)
+    eroded_cortex_mask._source_data[:] = erode(filled_cortex_mask._source_data[:], shrinkdisk=40)
+    
     # size to feed to 10x u-nets in pixels
     patch_shape_final = Coordinate(1056, 1056)
     # size to feed to 10x u-nets in nm
